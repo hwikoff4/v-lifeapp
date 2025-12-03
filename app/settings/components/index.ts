@@ -1,0 +1,8 @@
+export { AccountSection } from "./AccountSection"
+export { ReferralsSection } from "./ReferralsSection"
+export { NotificationsSection } from "./NotificationsSection"
+export { StreaksSection } from "./StreaksSection"
+export { UnitsSection } from "./UnitsSection"
+export { PrivacySection } from "./PrivacySection"
+export { AboutSection } from "./AboutSection"
+
