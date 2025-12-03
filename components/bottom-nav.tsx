@@ -1,6 +1,7 @@
 "use client"
 
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { Home, Dumbbell, Utensils, Users, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -15,7 +16,6 @@ const rightNavItems = [
 ]
 
 export function BottomNav() {
-  const router = useRouter()
   const pathname = usePathname()
 
   const isVBotActive = pathname === "/vbot"
@@ -29,10 +29,11 @@ export function BottomNav() {
             const isActive = pathname === item.path
 
             return (
-              <button
+              <Link
                 key={item.path}
+                href={item.path}
+                prefetch={true}
                 className="flex flex-col items-center justify-center min-w-[60px]"
-                onClick={() => router.push(item.path)}
               >
                 <item.icon className={cn("h-6 w-6 transition-all", isActive ? "text-accent" : "text-white/60")} />
                 <span
@@ -40,7 +41,7 @@ export function BottomNav() {
                 >
                   {item.label}
                 </span>
-              </button>
+              </Link>
             )
           })}
         </div>
@@ -59,8 +60,9 @@ export function BottomNav() {
           }
         `}</style>
 
-        <button
-          onClick={() => router.push("/vbot")}
+        <Link
+          href="/vbot"
+          prefetch={true}
           className={cn(
             "absolute left-1/2 -translate-x-1/2 -top-4 flex h-14 w-14 items-center justify-center rounded-full transition-all border-2 border-black",
             isVBotActive
@@ -69,7 +71,7 @@ export function BottomNav() {
           )}
         >
           <Bot className="h-7 w-7 text-black" strokeWidth={2.5} />
-        </button>
+        </Link>
 
         {/* Right nav items */}
         <div className="flex gap-2 ml-2">
@@ -77,10 +79,11 @@ export function BottomNav() {
             const isActive = pathname === item.path
 
             return (
-              <button
+              <Link
                 key={item.path}
+                href={item.path}
+                prefetch={true}
                 className="flex flex-col items-center justify-center min-w-[60px]"
-                onClick={() => router.push(item.path)}
               >
                 <item.icon className={cn("h-6 w-6 transition-all", isActive ? "text-accent" : "text-white/60")} />
                 <span
@@ -88,7 +91,7 @@ export function BottomNav() {
                 >
                   {item.label}
                 </span>
-              </button>
+              </Link>
             )
           })}
         </div>
