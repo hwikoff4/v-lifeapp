@@ -90,6 +90,15 @@ export default function SettingsClient({
     })
   }
 
+  const handleBack = () => {
+    if (typeof window === "undefined" || window.history.length <= 1) {
+      router.push("/dashboard")
+      return
+    }
+
+    router.back()
+  }
+
   const handleTimezoneChange = async (newTimezone: string) => {
     const updatedProfile = { ...profileData, timezone: newTimezone }
     setProfileData(updatedProfile)
@@ -275,7 +284,7 @@ export default function SettingsClient({
       <div className="container max-w-md px-4 py-6">
         {/* Header */}
         <div className="mb-6 flex items-center">
-          <ButtonGlow variant="outline-glow" size="icon" onClick={() => router.back()} className="mr-3 h-8 w-8">
+          <ButtonGlow variant="outline-glow" size="icon" onClick={handleBack} className="mr-3 h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </ButtonGlow>
           <div>

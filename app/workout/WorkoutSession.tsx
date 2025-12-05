@@ -7,8 +7,9 @@ import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
+import { CelebrationModal } from "@/components/confetti-celebration"
 import type { ActiveWorkoutPayload } from "@/lib/actions/workouts"
-import { ArrowLeft, CheckCircle, ListOrdered, Repeat } from "lucide-react"
+import { ArrowLeft, CheckCircle, ListOrdered, Repeat, Sparkles, Clock, Target, Trophy } from "lucide-react"
 
 interface WorkoutSessionProps {
   initialWorkout: ActiveWorkoutPayload | null
@@ -17,15 +18,23 @@ interface WorkoutSessionProps {
 export default function WorkoutSession({ initialWorkout }: WorkoutSessionProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const [workout] = useState(initialWorkout)
+  const [workout, setWorkout] = useState(initialWorkout)
   const [inputs, setInputs] = useState<Record<string, { weight: string; reps: string }>>({})
   const [pendingExercise, setPendingExercise] = useState<string | null>(null)
   const [completingWorkout, setCompletingWorkout] = useState(false)
+  const [showCelebration, setShowCelebration] = useState(false)
+  const [isWorkoutCompleted, setIsWorkoutCompleted] = useState(false)
 
   if (!workout) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20 flex items-center justify-center text-white/70">
-        No workout scheduled for today.
+      <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20 flex flex-col items-center justify-center gap-4 px-4">
+        <div className="text-center">
+          <p className="text-white/70 text-lg">No workout scheduled for today.</p>
+          <p className="text-white/50 text-sm mt-2">Visit the Fitness tab to generate your AI workout.</p>
+        </div>
+        <ButtonGlow variant="accent-glow" onClick={() => router.push("/fitness")}>
+          Go to Fitness
+        </ButtonGlow>
       </div>
     )
   }
@@ -89,6 +98,7 @@ export default function WorkoutSession({ initialWorkout }: WorkoutSessionProps) 
     const { completeWorkout } = await import("@/lib/actions/workouts")
     const result = await completeWorkout(workout.workoutId)
     setCompletingWorkout(false)
+    
     if (!result.success) {
       toast({
         title: "Unable to complete workout",
@@ -98,10 +108,13 @@ export default function WorkoutSession({ initialWorkout }: WorkoutSessionProps) 
       return
     }
 
-    toast({
-      title: "Workout complete",
-      description: "Way to finish strong!",
-    })
+    // Show celebration modal with confetti!
+    setIsWorkoutCompleted(true)
+    setShowCelebration(true)
+  }
+
+  const handleCelebrationClose = () => {
+    setShowCelebration(false)
     router.push("/fitness?completed=true")
   }
 
@@ -112,36 +125,61 @@ export default function WorkoutSession({ initialWorkout }: WorkoutSessionProps) 
           <button onClick={() => router.back()} className="mr-4 rounded-full p-2 hover:bg-white/10">
             <ArrowLeft className="h-6 w-6 text-white" />
           </button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-white">{workout.name}</h1>
-            <p className="text-white/70 capitalize">{workout.workoutType}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-white/70 capitalize">{workout.workoutType}</span>
+              {workout.dayEmphasis && (
+                <>
+                  <span className="text-white/30">•</span>
+                  <span className="text-accent text-sm">{workout.dayEmphasis}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        <Card className="border-white/10 bg-black/50 backdrop-blur-sm">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-white/70">Mode</p>
-              <p className="text-white font-semibold flex items-center gap-2">
-                {workout.mode === "rounds" ? (
-                  <>
-                    <Repeat className="h-4 w-4" /> Rounds
-                  </>
-                ) : (
-                  <>
-                    <ListOrdered className="h-4 w-4" /> Sets
-                  </>
-                )}
-              </p>
+        {/* AI Badge & Info */}
+        <Card className="border-accent/20 bg-gradient-to-br from-accent/10 to-transparent">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4 text-accent" />
+              <span className="text-sm text-accent font-medium">AI-Generated Workout</span>
             </div>
-            {workout.durationMinutes && (
-              <div>
-                <p className="text-sm text-white/70">Duration</p>
-                <p className="text-white font-semibold">{workout.durationMinutes} min</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5 text-white/70">
+                  {workout.mode === "rounds" ? (
+                    <Repeat className="h-4 w-4" />
+                  ) : (
+                    <ListOrdered className="h-4 w-4" />
+                  )}
+                  <span className="text-sm capitalize">{workout.mode}</span>
+                </div>
+                {workout.durationMinutes && (
+                  <div className="flex items-center gap-1.5 text-white/70">
+                    <Clock className="h-4 w-4" />
+                    <span className="text-sm">{workout.durationMinutes} min</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-white/70">
+                  <Target className="h-4 w-4" />
+                  <span className="text-sm">{workout.exercises.length} exercises</span>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
+
+        {/* Conditioning Notes */}
+        {workout.conditioningNotes && (
+          <Card className="border-white/10 bg-black/50 backdrop-blur-sm">
+            <CardContent className="p-4">
+              <p className="text-sm text-accent font-semibold mb-2">Conditioning Finisher</p>
+              <p className="text-sm text-white/80">{workout.conditioningNotes}</p>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="space-y-4">
           {workout.exercises.map((exercise) => (
@@ -193,16 +231,51 @@ export default function WorkoutSession({ initialWorkout }: WorkoutSessionProps) 
           ))}
         </div>
 
-        <ButtonGlow
-          variant="accent-glow"
-          className="w-full flex items-center justify-center gap-2"
-          onClick={handleCompleteWorkout}
-          disabled={completingWorkout}
-        >
-          <CheckCircle className="h-4 w-4" />
-          {completingWorkout ? "Finishing..." : "Finish Workout"}
-        </ButtonGlow>
+        {!isWorkoutCompleted ? (
+          <ButtonGlow
+            variant="accent-glow"
+            className="w-full flex items-center justify-center gap-2"
+            onClick={handleCompleteWorkout}
+            disabled={completingWorkout}
+          >
+            {completingWorkout ? (
+              <>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                </motion.div>
+                Finishing...
+              </>
+            ) : (
+              <>
+                <Trophy className="h-4 w-4" />
+                Finish Workout
+              </>
+            )}
+          </ButtonGlow>
+        ) : (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full py-4 px-6 bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-500/30 rounded-xl text-center"
+          >
+            <div className="flex items-center justify-center gap-2 text-green-400 font-semibold">
+              <CheckCircle className="h-5 w-5" />
+              Workout Completed!
+            </div>
+          </motion.div>
+        )}
       </div>
+
+      {/* Celebration Modal */}
+      <CelebrationModal
+        isOpen={showCelebration}
+        onClose={handleCelebrationClose}
+        workoutName={workout.name}
+        exerciseCount={workout.exercises.length}
+      />
     </div>
   )
 }

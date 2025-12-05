@@ -60,20 +60,34 @@ async function retrieveRelevantHistory(
   userId: string,
   queryEmbedding: number[],
   currentConversationId: string | null,
-  limit: number = 5
+  limit: number = 8
 ): Promise<any[]> {
   try {
+    console.log("[VBot] RAG: Searching for relevant history...")
+    console.log("[VBot] RAG: User ID:", userId)
+    console.log("[VBot] RAG: Excluding conversation:", currentConversationId)
+    console.log("[VBot] RAG: Embedding length:", queryEmbedding.length)
+    
+    // Format embedding as PostgreSQL vector literal
+    const embeddingString = `[${queryEmbedding.join(',')}]`
+    
     const { data, error } = await supabase.rpc('match_chat_messages', {
-      query_embedding: `[${queryEmbedding.join(',')}]`,
+      query_embedding: embeddingString,
       match_user_id: userId,
-      match_threshold: 0.6,
+      match_threshold: 0.4, // Lower threshold for better recall
       match_count: limit,
-      exclude_conversation_id: currentConversationId || null,
+      exclude_conversation_id: currentConversationId,
     })
     
     if (error) {
-      console.error("[VBot] RAG error:", error)
+      console.error("[VBot] RAG error:", JSON.stringify(error))
       return []
+    }
+    
+    console.log("[VBot] RAG: Found", data?.length || 0, "relevant messages")
+    if (data && data.length > 0) {
+      console.log("[VBot] RAG: Top match similarity:", data[0].similarity)
+      console.log("[VBot] RAG: Top match preview:", data[0].content?.slice(0, 100))
     }
     
     return data || []
@@ -295,7 +309,9 @@ Deno.serve(async (req: Request) => {
     let retrievedMessages: any[] = []
     
     try {
+      console.log("[VBot] Generating embedding for query:", latestUserMessage.content.slice(0, 100))
       queryEmbedding = await generateEmbedding(latestUserMessage.content, openaiApiKey)
+      console.log("[VBot] Embedding generated successfully, length:", queryEmbedding.length)
       
       // Retrieve relevant history from other conversations
       retrievedMessages = await retrieveRelevantHistory(
@@ -303,10 +319,11 @@ Deno.serve(async (req: Request) => {
         user.id,
         queryEmbedding,
         conversationId,
-        5
+        8  // Increased limit for better coverage
       )
+      console.log("[VBot] Retrieved", retrievedMessages.length, "relevant messages from history")
     } catch (embeddingError) {
-      console.error("[VBot] Embedding/RAG error:", embeddingError)
+      console.error("[VBot] Embedding/RAG error:", embeddingError instanceof Error ? embeddingError.message : embeddingError)
     }
 
     // Get recent messages from current conversation (PRIORITY)
@@ -454,10 +471,18 @@ Your role is to:
     
     // Add retrieved context as memories from past conversations
     if (retrievedContext) {
+      console.log("[VBot] Adding retrieved context to prompt")
       finalMessages.push({
         role: "system",
-        content: `MEMORIES FROM PAST CONVERSATIONS WITH THIS USER (use these to personalize your response):\n${retrievedContext}`
+        content: `IMPORTANT - MEMORIES FROM PAST CONVERSATIONS WITH THIS USER:
+The following are relevant excerpts from previous conversations you've had with this user. Use this information to provide personalized, context-aware responses. If the user asks about something they've mentioned before, reference this information.
+
+${retrievedContext}
+
+Remember to naturally incorporate this context when relevant to the user's current question.`
       })
+    } else {
+      console.log("[VBot] No retrieved context available")
     }
     
     // Add current conversation messages (the main context)

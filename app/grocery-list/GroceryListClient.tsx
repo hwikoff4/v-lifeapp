@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, Check, Plus, Trash2, ShoppingCart } from "lucide-react"
+import { ArrowLeft, Check, Plus, Trash2, ShoppingCart, RefreshCw, Utensils, Calendar, User } from "lucide-react"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { BottomNav } from "@/components/bottom-nav"
 import { useToast } from "@/hooks/use-toast"
 
 interface GroceryItem {
@@ -15,13 +16,23 @@ interface GroceryItem {
   category: string | null
   quantity: string | null
   checked: boolean
+  source?: "manual" | "meal" | "forecast"
 }
 
 interface GroceryListClientProps {
   items: GroceryItem[]
 }
 
-const categories = ["Proteins", "Carbohydrates", "Vegetables", "Fruits", "Healthy Fats", "Pantry Items"]
+const categories = [
+  "Proteins",
+  "Carbohydrates",
+  "Vegetables",
+  "Fruits",
+  "Dairy",
+  "Healthy Fats",
+  "Pantry Items",
+  "Spices & Seasonings",
+]
 
 export function GroceryListClient({ items }: GroceryListClientProps) {
   const router = useRouter()
@@ -30,10 +41,16 @@ export function GroceryListClient({ items }: GroceryListClientProps) {
   const [newItem, setNewItem] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(categories[0])
   const [isSaving, setIsSaving] = useState(false)
+  const [isSyncing, startSyncTransition] = useTransition()
 
   const completedItems = groceryItems.filter((item) => item.checked).length
   const totalItems = groceryItems.length
   const progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0
+
+  // Count items by source
+  const mealItems = groceryItems.filter((i) => i.source === "meal").length
+  const forecastItems = groceryItems.filter((i) => i.source === "forecast").length
+  const manualItems = groceryItems.filter((i) => i.source === "manual" || !i.source).length
 
   const getItemsByCategory = (category: string) => {
     return groceryItems.filter((item) => item.category === category)
@@ -105,6 +122,48 @@ export function GroceryListClient({ items }: GroceryListClientProps) {
     router.refresh()
   }
 
+  const handleSyncWithMeals = async () => {
+    startSyncTransition(async () => {
+      const { syncGroceryListWithMeals } = await import("@/lib/actions/grocery")
+      const result = await syncGroceryListWithMeals()
+      if (result.success) {
+        toast({
+          title: "Grocery list synced!",
+          description: `Added ${result.itemCount || 0} items from your meal plan and 7-day forecast.`,
+        })
+        router.refresh()
+      } else {
+        toast({
+          title: "Sync failed",
+          description: result.error || "Please try again.",
+          variant: "destructive",
+        })
+      }
+    })
+  }
+
+  const getSourceIcon = (source?: string) => {
+    switch (source) {
+      case "meal":
+        return <Utensils className="h-3 w-3" />
+      case "forecast":
+        return <Calendar className="h-3 w-3" />
+      default:
+        return <User className="h-3 w-3" />
+    }
+  }
+
+  const getSourceLabel = (source?: string) => {
+    switch (source) {
+      case "meal":
+        return "From meals"
+      case "forecast":
+        return "7-day forecast"
+      default:
+        return "Custom"
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20">
       <div className="container max-w-md px-4 py-6">
@@ -119,11 +178,32 @@ export function GroceryListClient({ items }: GroceryListClientProps) {
           <ShoppingCart className="h-6 w-6 text-accent" />
         </div>
 
+        {/* Sync Button */}
+        <motion.div
+          className="mb-4"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <ButtonGlow
+            variant="accent-glow"
+            className="w-full"
+            onClick={handleSyncWithMeals}
+            disabled={isSyncing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing with meals..." : "Sync with Meal Plan"}
+          </ButtonGlow>
+          <p className="mt-2 text-center text-xs text-white/50">
+            Pulls ingredients from today & tomorrow's meals + AI 7-day forecast
+          </p>
+        </motion.div>
+
         <motion.div
           className="mb-6"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.3, delay: 0.05 }}
         >
           <Card className="border-white/10 bg-black/50 backdrop-blur-sm">
             <CardContent className="p-4">
@@ -140,6 +220,29 @@ export function GroceryListClient({ items }: GroceryListClientProps) {
               <p className="text-sm text-white/70">
                 {completedItems} of {totalItems} items completed
               </p>
+              {/* Source breakdown */}
+              {totalItems > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  {mealItems > 0 && (
+                    <span className="flex items-center gap-1 rounded-full bg-green-500/20 px-2 py-1 text-green-400">
+                      <Utensils className="h-3 w-3" />
+                      {mealItems} from meals
+                    </span>
+                  )}
+                  {forecastItems > 0 && (
+                    <span className="flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-1 text-blue-400">
+                      <Calendar className="h-3 w-3" />
+                      {forecastItems} forecast
+                    </span>
+                  )}
+                  {manualItems > 0 && (
+                    <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-white/60">
+                      <User className="h-3 w-3" />
+                      {manualItems} custom
+                    </span>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -226,10 +329,16 @@ export function GroceryListClient({ items }: GroceryListClientProps) {
                             {item.checked && <Check className="h-4 w-4" />}
                           </button>
                           <div>
-                            <p className={`font-medium ${item.checked ? "text-accent" : "text-white"}`}>
+                            <p className={`font-medium ${item.checked ? "text-accent line-through" : "text-white"}`}>
                               {item.item_name}
                             </p>
-                            <p className="text-xs text-white/60">{item.quantity || "Quantity as needed"}</p>
+                            <div className="flex items-center gap-2 text-xs text-white/60">
+                              <span>{item.quantity || "As needed"}</span>
+                              <span className="flex items-center gap-1 opacity-60">
+                                {getSourceIcon(item.source)}
+                                {getSourceLabel(item.source)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <button onClick={() => handleRemoveItem(item.id)} className="text-white/50 hover:text-white">
@@ -244,18 +353,33 @@ export function GroceryListClient({ items }: GroceryListClientProps) {
           })}
         </motion.div>
 
-        <ButtonGlow
-          variant="outline-glow"
-          className="mt-6 w-full"
-          onClick={handleClearCompleted}
-          disabled={completedItems === 0}
-        >
-          Clear Purchased Items
-        </ButtonGlow>
+        {totalItems === 0 && (
+          <motion.div
+            className="mt-8 text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
+          >
+            <ShoppingCart className="mx-auto mb-4 h-16 w-16 text-white/20" />
+            <p className="text-lg font-medium text-white/60">Your grocery list is empty</p>
+            <p className="mt-2 text-sm text-white/40">
+              Click "Sync with Meal Plan" to auto-generate your shopping list based on your meals
+            </p>
+          </motion.div>
+        )}
+
+        {completedItems > 0 && (
+          <ButtonGlow
+            variant="outline-glow"
+            className="mt-6 w-full"
+            onClick={handleClearCompleted}
+          >
+            Clear Purchased Items ({completedItems})
+          </ButtonGlow>
+        )}
       </div>
 
       <BottomNav />
     </div>
   )
 }
-

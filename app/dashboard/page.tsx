@@ -60,7 +60,8 @@ export default async function DashboardPage() {
   // Handle habits - create defaults if none exist
   let habits = habitsResult.habits || []
   if (habits.length === 0 && !habitsResult.error) {
-    await createDefaultHabits()
+    // Skip revalidation during render to avoid Next.js error
+    await createDefaultHabits(true)
     const retryResult = await getUserHabits()
     habits = retryResult.habits || []
   }

@@ -83,6 +83,14 @@
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+    touch-action: manipulation;
+  }
+
+  a,
+  button,
+  [role="button"],
+  select {
+    touch-action: manipulation;
   }
   h1,
   h2,
@@ -219,4 +227,27 @@
       transition: none !important;
     }
   }
+}
+
+/* Hide Next.js development error overlay */
+#__next-build-watcher,
+nextjs-portal,
+[data-nextjs-dialog]:not([data-slot]),
+[data-nextjs-dialog-overlay]:not([data-slot]),
+[data-nextjs-toast]:not([data-radix-toast-viewport]),
+[data-nextjs-toast-errors] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Hide Next.js error overlay specific elements */
+[class*="__next-error-overlay"],
+[class*="nextjs-error-overlay"],
+[class*="__next-build-watcher"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }

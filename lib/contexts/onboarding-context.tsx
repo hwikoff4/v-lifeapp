@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import type { OnboardingData } from "@/lib/types"
 
 interface OnboardingContextType {
@@ -8,6 +8,8 @@ interface OnboardingContextType {
   updateData: (updates: Partial<OnboardingData>) => void
   clearData: () => void
 }
+
+const STORAGE_KEY = "v-life-onboarding"
 
 const defaultData: OnboardingData = {
   // Profile data
@@ -33,15 +35,55 @@ const defaultData: OnboardingData = {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined)
 
+function getStoredData(): OnboardingData {
+  if (typeof window === "undefined") return defaultData
+  try {
+    const stored = sessionStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      return { ...defaultData, ...JSON.parse(stored) }
+    }
+  } catch (e) {
+    console.error("[Onboarding] Failed to parse stored data:", e)
+  }
+  return defaultData
+}
+
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<OnboardingData>(defaultData)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Hydrate from sessionStorage on mount
+  useEffect(() => {
+    const stored = getStoredData()
+    setData(stored)
+    setIsHydrated(true)
+  }, [])
 
   const updateData = (updates: Partial<OnboardingData>) => {
-    setData((prev) => ({ ...prev, ...updates }))
+    setData((prev) => {
+      const newData = { ...prev, ...updates }
+      // Persist to sessionStorage
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
+      } catch (e) {
+        console.error("[Onboarding] Failed to save data:", e)
+      }
+      return newData
+    })
   }
 
   const clearData = () => {
     setData(defaultData)
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch (e) {
+      console.error("[Onboarding] Failed to clear data:", e)
+    }
+  }
+
+  // Don't render children until hydrated to avoid hydration mismatch
+  if (!isHydrated) {
+    return null
   }
 
   return (

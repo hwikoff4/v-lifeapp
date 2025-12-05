@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, lazy, Suspense, memo } from "react"
+import { useState, useEffect, lazy, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import {
   Heart,
@@ -34,7 +34,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { getRandomAvatar, DEFAULT_AVATAR } from "@/lib/stock-images"
+import { DEFAULT_AVATAR } from "@/lib/stock-images"
 
 // Lazy load modal
 const CreatePostModal = lazy(() => import("@/app/create-post-modal").then(m => ({ default: m.CreatePostModal })))
@@ -76,6 +76,15 @@ interface LeaderboardUser {
   rank: number
 }
 
+type Challenge = {
+  id: string
+  title: string
+  description: string
+  participants: number
+  daysLeft: number
+  progress: number
+}
+
 export default function Community() {
   const router = useRouter()
   const [createPostModalOpen, setCreatePostModalOpen] = useState(false)
@@ -90,6 +99,8 @@ export default function Community() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentUserName, setCurrentUserName] = useState("User")
+  const [challenges, setChallenges] = useState<Challenge[]>([])
+  const [isLoadingChallenges, setIsLoadingChallenges] = useState(false)
 
   useEffect(() => {
     loadPosts()
@@ -110,6 +121,12 @@ export default function Community() {
       loadComments(selectedPost.id)
     }
   }, [selectedPost])
+
+  useEffect(() => {
+    if (showChallenges) {
+      loadChallenges()
+    }
+  }, [showChallenges])
 
   const loadCurrentUser = async () => {
     try {
@@ -150,6 +167,21 @@ export default function Community() {
     }
   }
 
+  const loadChallenges = async () => {
+    setIsLoadingChallenges(true)
+    try {
+      const { getChallenges } = await import("@/lib/actions/community")
+      const result = await getChallenges()
+      if (result.challenges) {
+        setChallenges(result.challenges as any)
+      }
+    } catch (error) {
+      console.error("Error loading challenges:", error)
+    } finally {
+      setIsLoadingChallenges(false)
+    }
+  }
+
   const loadComments = async (postId: number) => {
     try {
       const { getComments } = await import("@/lib/actions/community")
@@ -170,33 +202,6 @@ export default function Community() {
       console.error("Error loading comments:", error)
     }
   }
-
-  const [challenges] = useState([
-    {
-      id: 1,
-      title: "30-Day Consistency Challenge",
-      description: "Complete 30 workouts in 30 days",
-      participants: 156,
-      daysLeft: 12,
-      progress: 60,
-    },
-    {
-      id: 2,
-      title: "10K Steps Daily",
-      description: "Hit 10,000 steps every day this week",
-      participants: 234,
-      daysLeft: 3,
-      progress: 85,
-    },
-    {
-      id: 3,
-      title: "Protein Goal Master",
-      description: "Meet your protein goal for 14 days straight",
-      participants: 189,
-      daysLeft: 7,
-      progress: 50,
-    },
-  ])
 
   const currentUser = {
     name: currentUserName,
@@ -634,38 +639,47 @@ export default function Community() {
               Join community challenges and compete with others
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {challenges.map((challenge) => (
-              <Card key={challenge.id} className="border-white/10 bg-black/50">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-bold text-white mb-1">{challenge.title}</h4>
-                      <p className="text-sm text-white/70">{challenge.description}</p>
+          {isLoadingChallenges ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {challenges.map((challenge) => (
+                <Card key={challenge.id} className="border-white/10 bg-black/50">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="font-bold text-white mb-1">{challenge.title}</h4>
+                        <p className="text-sm text-white/70">{challenge.description}</p>
+                      </div>
+                      <Badge variant="outline" className="border-accent/50 text-accent">
+                        {challenge.daysLeft}d left
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="border-accent/50 text-accent">
-                      {challenge.daysLeft}d left
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs text-white/60">
-                      <span>{challenge.participants} participants</span>
-                      <span>{challenge.progress}% complete</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-white/60">
+                        <span>{challenge.participants} participants</span>
+                        <span>{challenge.progress}% complete</span>
+                      </div>
+                      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-accent to-accent/50 transition-all"
+                          style={{ width: `${challenge.progress}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-accent to-accent/50 transition-all"
-                        style={{ width: `${challenge.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                  <ButtonGlow variant="accent-glow" size="sm" className="w-full mt-3">
-                    Join Challenge
-                  </ButtonGlow>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <ButtonGlow variant="accent-glow" size="sm" className="w-full mt-3">
+                      Join Challenge
+                    </ButtonGlow>
+                  </CardContent>
+                </Card>
+              ))}
+              {challenges.length === 0 && (
+                <div className="text-center text-white/60 py-8">No challenges found for this month.</div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -31,6 +31,124 @@ interface PostWithRelations {
   post_reactions: PostReaction[]
 }
 
+type ChallengeMetric = "workoutDays" | "nutritionDays" | "activeDays"
+
+interface ChallengeDefinition {
+  title: string
+  description: string
+  participants: number
+  metric: ChallengeMetric
+  target: number
+}
+
+interface ChallengeProgress {
+  id: string
+  title: string
+  description: string
+  participants: number
+  daysLeft: number
+  progress: number
+}
+
+const MONTHLY_CHALLENGE_DEFS: Record<number, ChallengeDefinition[]> = {
+  0: [
+    { title: "New Year Reset", description: "Crush 20 workouts to start the year strong", participants: 940, metric: "workoutDays", target: 20 },
+    { title: "Fresh Start Nutrition", description: "Log your meals on 25 days this month", participants: 810, metric: "nutritionDays", target: 25 },
+    { title: "Winter Consistency", description: "Stay active most days this month", participants: 760, metric: "activeDays", target: 22 },
+  ],
+  1: [
+    { title: "Heart Health Hustle", description: "Cardio or lifts 16 days this month", participants: 720, metric: "workoutDays", target: 16 },
+    { title: "Protein for the Heart", description: "Log protein-focused meals 20 days", participants: 650, metric: "nutritionDays", target: 20 },
+    { title: "Love Your Core", description: "Move your body 18 days this month", participants: 610, metric: "activeDays", target: 18 },
+  ],
+  2: [
+    { title: "Spring Kickoff", description: "Hit 15 workout days as daylight returns", participants: 680, metric: "workoutDays", target: 15 },
+    { title: "Greens & Lean", description: "Log nutrition 22 days this month", participants: 640, metric: "nutritionDays", target: 22 },
+    { title: "Mobility March", description: "Active on 20 days to stay limber", participants: 590, metric: "activeDays", target: 20 },
+  ],
+  3: [
+    { title: "Spring Into Strength", description: "18 workout days to build momentum", participants: 630, metric: "workoutDays", target: 18 },
+    { title: "Hydration Bloom", description: "Pair logged meals with hydration 20 days", participants: 610, metric: "nutritionDays", target: 20 },
+    { title: "5K Prep", description: "Move on 20 days to prep for a 5K", participants: 560, metric: "activeDays", target: 20 },
+  ],
+  4: [
+    { title: "Muscle May", description: "Progressive overload 18 workout days", participants: 670, metric: "workoutDays", target: 18 },
+    { title: "Farmers Market Fuel", description: "Track meals 22 days with whole foods", participants: 620, metric: "nutritionDays", target: 22 },
+    { title: "Consistency Bloom", description: "Active on 22 days this month", participants: 590, metric: "activeDays", target: 22 },
+  ],
+  5: [
+    { title: "Summer Shred", description: "20 strong workout days pre-summer", participants: 720, metric: "workoutDays", target: 20 },
+    { title: "Sunlit Meals", description: "Log nutrition 24 days this month", participants: 700, metric: "nutritionDays", target: 24 },
+    { title: "Hydrate & Thrive", description: "Stay active and hydrated 22 days", participants: 640, metric: "activeDays", target: 22 },
+  ],
+  6: [
+    { title: "Midyear Reboot", description: "Recommit with 18 workout days", participants: 680, metric: "workoutDays", target: 18 },
+    { title: "BBQ Balance", description: "Log nutrition 22 days despite events", participants: 650, metric: "nutritionDays", target: 22 },
+    { title: "Heatwave Hydration", description: "Active on 20 days to beat the heat", participants: 610, metric: "activeDays", target: 20 },
+  ],
+  7: [
+    { title: "Back-on-Track August", description: "16 workout days, no missed Mondays", participants: 640, metric: "workoutDays", target: 16 },
+    { title: "End-of-Summer Sprint", description: "Log meals 22 days before fall", participants: 610, metric: "nutritionDays", target: 22 },
+    { title: "Travel Recovery", description: "Stay active 18 days even on the go", participants: 570, metric: "activeDays", target: 18 },
+  ],
+  8: [
+    { title: "Fall Focus", description: "Dial 18 workout days with intent", participants: 690, metric: "workoutDays", target: 18 },
+    { title: "Back-to-Routine", description: "Log nutrition 24 days to lock habits", participants: 660, metric: "nutritionDays", target: 24 },
+    { title: "Protein Prep", description: "Active on 20 days to stay sharp", participants: 630, metric: "activeDays", target: 20 },
+  ],
+  9: [
+    { title: "Fall Fitness Fest", description: "20 workout days before holidays", participants: 710, metric: "workoutDays", target: 20 },
+    { title: "Pumpkin Power", description: "Log meals 22 days, keep sugars in check", participants: 660, metric: "nutritionDays", target: 22 },
+    { title: "Spooky Sweat", description: "Stay active 20 days this month", participants: 620, metric: "activeDays", target: 20 },
+  ],
+  10: [
+    { title: "Gratitude Grind", description: "Move 18 days before big meals hit", participants: 750, metric: "workoutDays", target: 18 },
+    { title: "Maintain & Mingle", description: "Log 22 days to stay on target", participants: 700, metric: "nutritionDays", target: 22 },
+    { title: "Turkey Trot Prep", description: "Active on 20 days to prep the trot", participants: 670, metric: "activeDays", target: 20 },
+  ],
+  11: [
+    { title: "Holiday Hustle", description: "Keep 16 workout days through travel", participants: 820, metric: "workoutDays", target: 16 },
+    { title: "12 Days of Movement", description: "Lock in 12 workout days before Christmas", participants: 790, metric: "workoutDays", target: 12 },
+    { title: "Festive Fuel", description: "Log nutrition 20 days amid festivities", participants: 760, metric: "nutritionDays", target: 20 },
+  ],
+}
+
+function startOfMonth(date: Date) {
+  const d = new Date(date)
+  d.setDate(1)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function startOfNextMonth(date: Date) {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + 1, 1)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function daysInMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+}
+
+function daysLeftInMonth(date: Date) {
+  const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+  return Math.max(0, endOfMonth.getDate() - date.getDate() + 1)
+}
+
+function toDateKey(value: string | null | undefined) {
+  if (!value) return null
+  const ts = new Date(value)
+  if (Number.isNaN(ts.getTime())) return null
+  return ts.toISOString().split("T")[0]
+}
+
+function isWithinRange(value: string | null | undefined, start: number, end: number) {
+  if (!value) return false
+  const ts = new Date(value).getTime()
+  return !Number.isNaN(ts) && ts >= start && ts < end
+}
+
 // Cached posts fetch - revalidates every 30 seconds
 const getCachedPosts = unstable_cache(
   async (category?: string) => {
@@ -403,6 +521,113 @@ export async function getLeaderboard(): Promise<{ leaderboard?: LeaderboardUser[
     .slice(0, 5)
 
   return { leaderboard }
+}
+
+export async function getChallenges(): Promise<{ challenges?: ChallengeProgress[]; error?: string }> {
+  const { user, error: authError } = await getAuthUser()
+  if (authError || !user) {
+    return { error: "Not authenticated" }
+  }
+
+  const supabase = await createClient()
+  const now = new Date()
+  const month = now.getMonth()
+  const year = now.getFullYear()
+
+  const rangeStart = startOfMonth(now)
+  const rangeEnd = startOfNextMonth(now)
+  const rangeStartIso = rangeStart.toISOString()
+  const rangeEndIso = rangeEnd.toISOString()
+  const startMs = rangeStart.getTime()
+  const endMs = rangeEnd.getTime()
+  const totalDaysThisMonth = daysInMonth(now)
+  const daysRemaining = daysLeftInMonth(now)
+
+  const { data: mealLogs, error: mealError } = await supabase
+    .from("meal_logs")
+    .select("consumed_at")
+    .eq("user_id", user.id)
+    .gte("consumed_at", rangeStartIso)
+    .lt("consumed_at", rangeEndIso)
+    .limit(500)
+
+  if (mealError) {
+    console.error("Error loading meal logs:", mealError)
+    return { error: "Failed to load challenges" }
+  }
+
+  const { data: workouts, error: workoutError } = await supabase
+    .from("workouts")
+    .select("completed_at, scheduled_date, created_at, completed")
+    .eq("user_id", user.id)
+    .eq("completed", true)
+    .order("completed_at", { ascending: false })
+    .limit(400)
+
+  if (workoutError) {
+    console.error("Error loading workouts for challenges:", workoutError)
+    return { error: "Failed to load challenges" }
+  }
+
+  const nutritionDays = new Set<string>()
+  mealLogs?.forEach((log) => {
+    if (isWithinRange(log.consumed_at, startMs, endMs)) {
+      const key = toDateKey(log.consumed_at)
+      if (key) nutritionDays.add(key)
+    }
+  })
+
+  const workoutDays = new Set<string>()
+  workouts?.forEach((workout) => {
+    const dateValue = (workout as any).completed_at || (workout as any).scheduled_date || (workout as any).created_at
+    if (isWithinRange(dateValue, startMs, endMs)) {
+      const key = toDateKey(dateValue)
+      if (key) workoutDays.add(key)
+    }
+  })
+
+  const activeDays = new Set<string>([...nutritionDays, ...workoutDays])
+
+  const metricValues: Record<ChallengeMetric, number> = {
+    nutritionDays: nutritionDays.size,
+    workoutDays: workoutDays.size,
+    activeDays: activeDays.size,
+  }
+
+  const defs = MONTHLY_CHALLENGE_DEFS[month] || []
+  const seasonalChallenges: ChallengeProgress[] = defs.map((challenge, index) => {
+    const currentValue = metricValues[challenge.metric] || 0
+    const progress = challenge.target > 0 ? Math.min(100, Math.round((currentValue / challenge.target) * 100)) : 0
+    return {
+      ...challenge,
+      id: `${year}-${month}-seasonal-${index}`,
+      daysLeft: daysRemaining,
+      progress,
+    }
+  })
+
+  const streakChallenges: ChallengeProgress[] = [
+    {
+      id: `${year}-${month}-streak-nutrition`,
+      title: "Daily Nutrition Streak",
+      description: "Log your nutrition every day this month.",
+      participants: 540,
+      daysLeft: daysRemaining,
+      progress:
+        totalDaysThisMonth > 0 ? Math.min(100, Math.round((metricValues.nutritionDays / totalDaysThisMonth) * 100)) : 0,
+    },
+    {
+      id: `${year}-${month}-streak-workouts`,
+      title: "Daily Workout Streak",
+      description: "Complete a workout every day this month.",
+      participants: 520,
+      daysLeft: daysRemaining,
+      progress:
+        totalDaysThisMonth > 0 ? Math.min(100, Math.round((metricValues.workoutDays / totalDaysThisMonth) * 100)) : 0,
+    },
+  ]
+
+  return { challenges: [...seasonalChallenges, ...streakChallenges] }
 }
 
 function getTimeAgo(date: Date): string {

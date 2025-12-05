@@ -26,11 +26,25 @@ export async function getProfile(): Promise<ProfileResult> {
   const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
+    console.log("[getProfile] Not authenticated")
     return { profile: null, error: "Not authenticated" }
   }
 
   try {
-    const profile = await getCachedProfile(user.id)
+    // Bypass cache temporarily to debug - fetch directly from database
+    const supabase = await createClient()
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (error) {
+      console.error("[getProfile] Database error:", error)
+      throw error
+    }
+
+    console.log("[getProfile] Fetched profile for user", user.id, ":", profile)
     return { profile: profile || null }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to load profile"
@@ -59,6 +73,7 @@ export async function updateProfile(profileData: {
   allergies?: string[]
   customRestrictions?: string[]
   timezone?: string
+  onboardingCompleted?: boolean
 }): Promise<{ success?: boolean; error?: string }> {
   const { user, error: authError } = await getAuthUser()
 
@@ -88,30 +103,38 @@ export async function updateProfile(profileData: {
   }
 
   try {
+    const dataToUpsert = {
+      id: user.id,
+      name: profileData.name,
+      age: profileData.age ? Number.parseInt(profileData.age) : null,
+      gender: profileData.gender,
+      height_feet: profileData.heightFeet ? Number.parseInt(profileData.heightFeet) : null,
+      height_inches: profileData.heightInches ? Number.parseInt(profileData.heightInches) : null,
+      weight: profileData.weight ? Number.parseFloat(profileData.weight) : null,
+      goal_weight: profileData.goalWeight ? Number.parseFloat(profileData.goalWeight) : null,
+      primary_goal: profileData.primaryGoal,
+      activity_level: profileData.activityLevel,
+      gym_access: profileData.gymAccess,
+      selected_gym: profileData.selectedGym,
+      custom_equipment: profileData.customEquipment,
+      allergies: profileData.allergies,
+      custom_restrictions: profileData.customRestrictions,
+      timezone: profileData.timezone,
+      onboarding_completed: profileData.onboardingCompleted,
+      updated_at: new Date().toISOString(),
+    }
+    
+    console.log("[updateProfile] User ID:", user.id)
+    console.log("[updateProfile] Data to upsert:", dataToUpsert)
+
     await retryWithBackoff(
       async () => {
-        const { error } = await supabase.from("profiles").upsert(
-          {
-            id: user.id,
-            name: profileData.name,
-            age: profileData.age ? Number.parseInt(profileData.age) : null,
-            gender: profileData.gender,
-            height_feet: profileData.heightFeet ? Number.parseInt(profileData.heightFeet) : null,
-            height_inches: profileData.heightInches ? Number.parseInt(profileData.heightInches) : null,
-            weight: profileData.weight ? Number.parseFloat(profileData.weight) : null,
-            goal_weight: profileData.goalWeight ? Number.parseFloat(profileData.goalWeight) : null,
-            primary_goal: profileData.primaryGoal,
-            activity_level: profileData.activityLevel,
-            gym_access: profileData.gymAccess,
-            selected_gym: profileData.selectedGym,
-            custom_equipment: profileData.customEquipment,
-            allergies: profileData.allergies,
-            custom_restrictions: profileData.customRestrictions,
-            timezone: profileData.timezone,
-            updated_at: new Date().toISOString(),
-          },
+        const { error, data } = await supabase.from("profiles").upsert(
+          dataToUpsert,
           { onConflict: "id" }
-        )
+        ).select()
+
+        console.log("[updateProfile] Upsert result - error:", error, "data:", data)
 
         if (error) throw error
       },

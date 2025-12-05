@@ -3,19 +3,27 @@
 import { useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { Settings, Target, Dumbbell, Calendar, ArrowRight } from "lucide-react"
+import { Settings, Target, Dumbbell, Calendar, ArrowRight, Sparkles, Zap, Clock } from "lucide-react"
 import { BottomNav } from "@/components/bottom-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import type { ActiveWorkoutPayload, WorkoutOverview } from "@/lib/actions/workouts"
 
+interface ProgrammingContext {
+  dayName: string
+  emphasis: string
+  weekPhase: string
+  isSunday: boolean
+}
+
 interface FitnessClientProps {
   userName: string
   activeWorkout: ActiveWorkoutPayload | null
   overview: WorkoutOverview
+  programmingContext: ProgrammingContext
 }
 
-export function FitnessClient({ userName, activeWorkout, overview }: FitnessClientProps) {
+export function FitnessClient({ userName, activeWorkout, overview, programmingContext }: FitnessClientProps) {
   const router = useRouter()
 
   const weeklyHighlights = useMemo(() => {
@@ -39,6 +47,33 @@ export function FitnessClient({ userName, activeWorkout, overview }: FitnessClie
             <Settings className="h-4 w-4" />
           </ButtonGlow>
         </div>
+
+        {/* Today's Programming Context */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Card className="border-accent/20 bg-gradient-to-br from-accent/10 to-transparent">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
+                    <Sparkles className="h-5 w-5 text-accent" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-white/60">{programmingContext.dayName}</p>
+                    <p className="text-white font-semibold">{programmingContext.emphasis}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-white/40">Week Phase</p>
+                  <p className="text-sm text-accent font-medium">{programmingContext.weekPhase}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
         <motion.div
           className="grid grid-cols-3 gap-3"
@@ -81,36 +116,103 @@ export function FitnessClient({ userName, activeWorkout, overview }: FitnessClie
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">Today's Workout</h2>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <Zap className="h-5 w-5 text-accent" />
+              Today&apos;s Workout
+            </h2>
             <ButtonGlow variant="outline-glow" size="sm" onClick={() => router.push("/workout")}>
               View Plan
             </ButtonGlow>
           </div>
-          {activeWorkout ? (
+          {programmingContext.isSunday ? (
             <Card className="border-white/10 bg-black/60">
               <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-white/80">
-                  <Dumbbell className="h-4 w-4 text-accent" />
-                  <span>{activeWorkout.name}</span>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Target className="h-5 w-5 text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-semibold">Rest & Recovery Day</p>
+                    <p className="text-sm text-white/60">Take time to recover. Light stretching or a walk is optional.</p>
+                  </div>
                 </div>
-                <ul className="space-y-2">
-                  {activeWorkout.exercises.slice(0, 4).map((exercise) => (
-                    <li key={exercise.workoutExerciseId} className="flex justify-between text-sm text-white/70">
-                      <span>{exercise.name}</span>
-                      <span>
-                        {exercise.sets} x {exercise.reps}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <ButtonGlow variant="accent-glow" className="w-full" onClick={() => router.push("/workout")}>
-                  Start Workout <ArrowRight className="ml-2 h-4 w-4" />
-                </ButtonGlow>
               </CardContent>
             </Card>
+          ) : activeWorkout ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+            >
+              <Card className="border-white/10 bg-black/60 overflow-hidden">
+                <CardContent className="p-4 space-y-4">
+                  {/* Workout Header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
+                        <Dumbbell className="h-5 w-5 text-accent" />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold">{activeWorkout.name}</p>
+                        <p className="text-xs text-white/50 capitalize">{activeWorkout.workoutType || "Strength"}</p>
+                      </div>
+                    </div>
+                    {activeWorkout.durationMinutes && (
+                      <div className="flex items-center gap-1 text-white/60 text-sm">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>{activeWorkout.durationMinutes}m</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AI Badge */}
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 rounded-lg w-fit">
+                    <Sparkles className="h-3.5 w-3.5 text-accent" />
+                    <span className="text-xs text-accent font-medium">AI-Generated for {programmingContext.dayName}</span>
+                  </div>
+
+                  {/* Exercises Preview */}
+                  <div className="space-y-2">
+                    {activeWorkout.exercises.slice(0, 4).map((exercise, index) => (
+                      <motion.div
+                        key={exercise.workoutExerciseId}
+                        className="flex justify-between items-center py-2 border-b border-white/5 last:border-0"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                      >
+                        <span className="text-sm text-white/80">{exercise.name}</span>
+                        <span className="text-sm text-white/50 font-mono">
+                          {exercise.sets} × {exercise.reps}
+                        </span>
+                      </motion.div>
+                    ))}
+                    {activeWorkout.exercises.length > 4 && (
+                      <p className="text-xs text-white/40 text-center pt-1">
+                        +{activeWorkout.exercises.length - 4} more exercises
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Conditioning Notes */}
+                  {activeWorkout.conditioningNotes && (
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <p className="text-xs text-accent font-semibold mb-1">Conditioning</p>
+                      <p className="text-sm text-white/70">{activeWorkout.conditioningNotes}</p>
+                    </div>
+                  )}
+
+                  <ButtonGlow variant="accent-glow" className="w-full" onClick={() => router.push("/workout")}>
+                    Start Workout <ArrowRight className="ml-2 h-4 w-4" />
+                  </ButtonGlow>
+                </CardContent>
+              </Card>
+            </motion.div>
           ) : (
             <Card className="border-white/10 bg-black/60">
-              <CardContent className="p-4 text-sm text-white/60">No workout scheduled today.</CardContent>
+              <CardContent className="p-4">
+                <p className="text-sm text-white/60">Loading your AI-generated workout...</p>
+              </CardContent>
             </Card>
           )}
         </div>

@@ -2,6 +2,14 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient, getAuthUser } from "@/lib/supabase/server"
+import { env } from "@/lib/env"
+import {
+  getDayName,
+  getDayEmphasis,
+  getRandomTemplate,
+  getWeekIntensity,
+  type DayOfWeek,
+} from "@/lib/workout-programming"
 
 type WorkoutMode = "sets" | "rounds"
 
@@ -23,16 +31,36 @@ export interface ActiveWorkoutPayload {
   mode: WorkoutMode
   workoutType: string | null
   durationMinutes: number | null
+  description: string | null
+  dayEmphasis: string
+  conditioningNotes: string | null
   exercises: WorkoutExerciseDetail[]
 }
 
-const STRENGTH_TEMPLATE = [
-  { name: "Bench Press", sets: 4, reps: "8-10", restSeconds: 90, order: 1 },
-  { name: "Pull-Ups", sets: 3, reps: "8-10", restSeconds: 90, order: 2 },
-  { name: "Shoulder Press", sets: 3, reps: "10-12", restSeconds: 60, order: 3 },
-  { name: "Bicep Curls", sets: 3, reps: "12", restSeconds: 60, order: 4 },
-  { name: "Tricep Extensions", sets: 3, reps: "12", restSeconds: 60, order: 5 },
-] as const
+interface ProfileInfo {
+  primary_goal?: string | null
+  activity_level?: number | null
+  gym_access?: string | null
+  custom_equipment?: string | null
+  weight?: number | null
+  age?: number | null
+  gender?: string | null
+}
+
+interface AIGeneratedWorkout {
+  name: string
+  description: string
+  exercises: Array<{
+    name: string
+    category: string
+    muscleGroup?: string
+    sets: number
+    reps: string
+    restSeconds: number
+    notes?: string
+  }>
+  conditioningNotes?: string
+}
 
 const exerciseCache = new Map<string, string>()
 
@@ -42,46 +70,289 @@ async function getExerciseId(name: string, supabase: Awaited<ReturnType<typeof c
   }
 
   const { data, error } = await supabase.from("exercises").select("id").eq("name", name).maybeSingle()
-  if (error || !data) {
-    throw new Error(`Exercise ${name} not found in catalog`)
+  if (error) {
+    throw new Error(`Failed to lookup exercise ${name}: ${error.message}`)
   }
-  exerciseCache.set(name, data.id)
-  return data.id
+  if (data) {
+    exerciseCache.set(name, data.id)
+    return data.id
+  }
+
+  return createExercisePlaceholder(name, supabase)
 }
 
-async function createDefaultWorkout(userId: string, supabase: Awaited<ReturnType<typeof createClient>>) {
+async function createExercisePlaceholder(
+  name: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  category: string = "strength",
+  muscleGroup?: string,
+) {
+  const payload = {
+    name,
+    category,
+    muscle_group: muscleGroup || null,
+    description: `${name} (auto-generated)`,
+  }
+  const { data, error } = await supabase.from("exercises").insert(payload).select("id").single()
+
+  if (error && error?.code !== "23505") {
+    throw new Error(`Unable to create exercise ${name}: ${error.message}`)
+  }
+
+  let exerciseId = data?.id
+  if (!exerciseId) {
+    const { data: fallback, error: fallbackError } = await supabase
+      .from("exercises")
+      .select("id")
+      .eq("name", name)
+      .maybeSingle()
+
+    if (fallbackError || !fallback) {
+      throw new Error(`Exercise ${name} not found in catalog`)
+    }
+
+    exerciseId = fallback.id
+  }
+
+  exerciseCache.set(name, exerciseId)
+  return exerciseId
+}
+
+// Fetch user profile for personalization
+async function fetchProfileInfo(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<ProfileInfo | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("primary_goal, activity_level, gym_access, custom_equipment, weight, age, gender")
+    .eq("id", userId)
+    .maybeSingle()
+  return data
+}
+
+// Generate AI-powered workout based on template and user profile
+async function generateAIWorkout(
+  template: WorkoutTemplate,
+  profile: ProfileInfo | null,
+  dayOfWeek: DayOfWeek,
+): Promise<AIGeneratedWorkout | null> {
+  if (!env.OPENAI_API_KEY) {
+    return null
+  }
+
+  const dayName = getDayName(dayOfWeek)
+  const emphasis = getDayEmphasis(dayOfWeek)
+  const weekInfo = getWeekIntensity()
+
+  const equipmentContext = profile?.gym_access === "home" || profile?.gym_access === "none"
+    ? "User has limited equipment (home/bodyweight focus). Prefer dumbbell, kettlebell, and bodyweight exercises."
+    : profile?.custom_equipment
+      ? `User equipment: ${profile.custom_equipment}`
+      : "Full gym access with barbells, machines, etc."
+
+  const goalContext = profile?.primary_goal
+    ? `User goal: ${profile.primary_goal.replace("-", " ")}`
+    : "General fitness"
+
+  const activityContext = profile?.activity_level
+    ? `Activity level: ${profile.activity_level}/5`
+    : "Moderate activity"
+
+  const templateExercises = template.exercises
+    .map((e) => `${e.name} (${e.sets}x${e.reps}, ${e.restSeconds}s rest)`)
+    .join(", ")
+
+  const systemMessage = `You are the V-Life AI fitness coach. Generate personalized workout variations following evidence-based programming principles.
+Current week phase: ${weekInfo.label} (intensity modifier: ${weekInfo.modifier}).
+Always return valid JSON with a "workout" object.`
+
+  const userMessage = `Generate a ${dayName} workout for "${emphasis}" day.
+${goalContext}. ${activityContext}. ${equipmentContext}.
+
+Base template: "${template.name}" - ${template.description}
+Template exercises: ${templateExercises}
+Conditioning format: ${template.conditioningFormat}
+Duration: ~${template.durationMinutes} minutes
+
+Create a varied workout following this template's structure but with appropriate exercise substitutions for variety.
+Keep the same number of exercises and similar rep/set schemes.
+Add brief coaching notes where helpful.
+
+Return JSON format:
+{
+  "workout": {
+    "name": "Creative workout name",
+    "description": "Brief description",
+    "exercises": [
+      {"name": "Exercise", "category": "strength|cardio|skill|accessory", "muscleGroup": "target", "sets": 4, "reps": "8-10", "restSeconds": 90, "notes": "optional tip"}
+    ],
+    "conditioningNotes": "Brief conditioning instructions"
+  }
+}`
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        max_tokens: 800,
+        messages: [
+          { role: "system", content: systemMessage },
+          { role: "user", content: userMessage },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      console.error("[Workout] AI generation failed:", response.status)
+      return null
+    }
+
+    const payload = await response.json()
+    const content = payload?.choices?.[0]?.message?.content
+
+    if (!content) {
+      return null
+    }
+
+    // Extract JSON from response
+    const start = content.indexOf("{")
+    const end = content.lastIndexOf("}")
+    if (start === -1 || end === -1) {
+      return null
+    }
+
+    const parsed = JSON.parse(content.slice(start, end + 1))
+    return parsed.workout || null
+  } catch (error) {
+    console.error("[Workout] AI generation error:", error)
+    return null
+  }
+}
+
+// Create workout from template (fallback when AI unavailable)
+function templateToWorkout(template: WorkoutTemplate): AIGeneratedWorkout {
+  return {
+    name: template.name,
+    description: template.description,
+    exercises: template.exercises.map((e) => ({
+      name: e.name,
+      category: e.category,
+      muscleGroup: e.muscleGroup,
+      sets: e.sets,
+      reps: e.reps,
+      restSeconds: e.restSeconds,
+      notes: e.notes,
+    })),
+    conditioningNotes: `${template.conditioningFormat}: ${template.conditioningNotes}`,
+  }
+}
+
+// Main function to create a day-appropriate workout
+async function createDailyWorkout(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string> {
+  const now = new Date()
+  const dayOfWeek = now.getDay() as DayOfWeek
+  const dayName = getDayName(dayOfWeek)
+  const emphasis = getDayEmphasis(dayOfWeek)
+
+  // Get user profile for personalization
+  const profile = await fetchProfileInfo(userId, supabase)
+
+  // Get base template for today
+  const template = getRandomTemplate(dayOfWeek)
+
+  // Try AI generation, fallback to template
+  let workoutData = await generateAIWorkout(template, profile, dayOfWeek)
+  if (!workoutData) {
+    workoutData = templateToWorkout(template)
+  }
+
+  // Create the workout record
   const { data: workout, error } = await supabase
     .from("workouts")
     .insert({
       user_id: userId,
-      name: "Upper Body Power",
-      description: "Strength session auto-generated by V-Life",
-      workout_type: "strength",
-      duration_minutes: 45,
+      name: workoutData.name,
+      description: `${dayName} - ${emphasis}: ${workoutData.description}`,
+      workout_type: template.workoutType,
+      duration_minutes: template.durationMinutes,
       mode: "sets",
+      scheduled_date: now.toISOString().split("T")[0],
     })
     .select("id")
     .single()
 
   if (error || !workout) {
-    throw new Error("Unable to create default workout")
+    console.error("[Workout] Failed to create workout:", error)
+    throw new Error("Unable to create daily workout")
   }
 
+  // Create exercise records
   const rows = []
-  for (const entry of STRENGTH_TEMPLATE) {
+  for (let i = 0; i < workoutData.exercises.length; i++) {
+    const entry = workoutData.exercises[i]
     const exerciseId = await getExerciseId(entry.name, supabase)
     rows.push({
       workout_id: workout.id,
       exercise_id: exerciseId,
-      order_index: entry.order,
+      order_index: i + 1,
       sets: entry.sets,
       reps: entry.reps,
       rest_seconds: entry.restSeconds,
     })
   }
 
-  await supabase.from("workout_exercises").insert(rows)
+  if (rows.length > 0) {
+    await supabase.from("workout_exercises").insert(rows)
+  }
+
   return workout.id
+}
+
+// Check if user has a workout scheduled for today
+async function getTodaysWorkout(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
+  const today = new Date().toISOString().split("T")[0]
+
+  // First try to find a workout scheduled for today
+  const { data: scheduledWorkout } = await supabase
+    .from("workouts")
+    .select("id, name, workout_type, duration_minutes, mode, completed, description")
+    .eq("user_id", userId)
+    .eq("scheduled_date", today)
+    .eq("completed", false)
+    .maybeSingle()
+
+  if (scheduledWorkout) {
+    return scheduledWorkout
+  }
+
+  // Fallback: find any incomplete workout from today
+  const startOfDay = new Date()
+  startOfDay.setHours(0, 0, 0, 0)
+
+  const { data: recentWorkout } = await supabase
+    .from("workouts")
+    .select("id, name, workout_type, duration_minutes, mode, completed, description")
+    .eq("user_id", userId)
+    .eq("completed", false)
+    .gte("created_at", startOfDay.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return recentWorkout
 }
 
 export async function getActiveWorkout(): Promise<ActiveWorkoutPayload | null> {
@@ -91,23 +362,26 @@ export async function getActiveWorkout(): Promise<ActiveWorkoutPayload | null> {
   }
 
   const supabase = await createClient()
-  let { data: workout } = await supabase
-    .from("workouts")
-    .select("id, name, workout_type, duration_minutes, mode, completed")
-    .eq("user_id", user.id)
-    .eq("completed", false)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const dayOfWeek = new Date().getDay() as DayOfWeek
+  const dayEmphasis = getDayEmphasis(dayOfWeek)
 
+  // Try to get today's workout
+  let workout = await getTodaysWorkout(user.id, supabase)
+
+  // If no workout exists for today, generate one
   if (!workout) {
-    const workoutId = await createDefaultWorkout(user.id, supabase)
-    const { data: created } = await supabase
-      .from("workouts")
-      .select("id, name, workout_type, duration_minutes, mode, completed")
-      .eq("id", workoutId)
-      .maybeSingle()
-    workout = created || null
+    try {
+      const workoutId = await createDailyWorkout(user.id, supabase)
+      const { data: created } = await supabase
+        .from("workouts")
+        .select("id, name, workout_type, duration_minutes, mode, completed, description")
+        .eq("id", workoutId)
+        .maybeSingle()
+      workout = created || null
+    } catch (err) {
+      console.error("[Workout] Failed to create daily workout:", err)
+      return null
+    }
   }
 
   if (!workout) return null
@@ -147,12 +421,19 @@ export async function getActiveWorkout(): Promise<ActiveWorkoutPayload | null> {
     completedSets: exercise.completed_sets || 0,
   }))
 
+  // Extract conditioning notes from description if present
+  const descriptionParts = workout.description?.split(": ") || []
+  const conditioningNotes = descriptionParts.length > 1 ? descriptionParts.slice(1).join(": ") : null
+
   return {
     workoutId: workout.id,
     name: workout.name,
     workoutType: workout.workout_type,
     durationMinutes: workout.duration_minutes,
     mode: (workout.mode as WorkoutMode) || "sets",
+    description: workout.description,
+    dayEmphasis,
+    conditioningNotes,
     exercises: formatted,
   }
 }
@@ -249,16 +530,35 @@ export async function refreshTrainingPlan() {
     .single()
 
   try {
-    await createDefaultWorkout(user.id, supabase)
+    // Mark any existing incomplete workouts for today as cancelled
+    const today = new Date().toISOString().split("T")[0]
     await supabase
-      .from("plan_refresh_events")
-      .update({ status: "completed", completed_at: new Date().toISOString(), message: "New training block generated" })
-      .eq("id", event.id)
+      .from("workouts")
+      .update({ completed: true, completed_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("completed", false)
+      .or(`scheduled_date.eq.${today},scheduled_date.is.null`)
+
+    // Generate a fresh AI workout for today
+    await createDailyWorkout(user.id, supabase)
+
+    if (event?.id) {
+      await supabase
+        .from("plan_refresh_events")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          message: "AI-generated workout created for today",
+        })
+        .eq("id", event.id)
+    }
   } catch (err) {
-    await supabase
-      .from("plan_refresh_events")
-      .update({ status: "failed", message: "Unable to refresh plan" })
-      .eq("id", event.id)
+    if (event?.id) {
+      await supabase
+        .from("plan_refresh_events")
+        .update({ status: "failed", message: "Unable to refresh plan" })
+        .eq("id", event.id)
+    }
     console.error("[Workout] Plan refresh failed:", err)
     return { success: false, error: "Failed to refresh plan" }
   }
@@ -267,6 +567,7 @@ export async function refreshTrainingPlan() {
   revalidatePath("/fitness")
   return { success: true }
 }
+
 
 export interface WorkoutOverview {
   weeklyWorkoutData: Array<{ week: string; workouts: number; volume: number; cardioMinutes: number }>

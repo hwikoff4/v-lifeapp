@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { RefreshCw, ShoppingCart, ChevronRight, RotateCcw, Settings } from "lucide-react"
 import { motion } from "framer-motion"
 import { ButtonGlow } from "@/components/ui/button-glow"
@@ -18,6 +19,7 @@ interface NutritionClientProps {
   totals: { calories: number; protein: number; carbs: number; fat: number }
   macros: Macros
   supplements: Supplement[]
+  tomorrowMeals: DailyMeal[]
 }
 
 interface MealAlternative {
@@ -27,7 +29,13 @@ interface MealAlternative {
   description?: string | null
 }
 
-export function NutritionClient({ meals, totals, macros, supplements }: NutritionClientProps) {
+export function NutritionClient({
+  meals,
+  totals,
+  macros,
+  supplements,
+  tomorrowMeals,
+}: NutritionClientProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [mealPlan, setMealPlan] = useState(meals)
@@ -35,6 +43,34 @@ export function NutritionClient({ meals, totals, macros, supplements }: Nutritio
   const [selectedMealForSwap, setSelectedMealForSwap] = useState<DailyMeal | null>(null)
   const [alternatives, setAlternatives] = useState<MealAlternative[]>([])
   const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefreshPlan = async () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    
+    try {
+      const { regenerateMealPlan } = await import("@/lib/actions/nutrition")
+      const result = await regenerateMealPlan()
+      if (!result.success) {
+        throw new Error(result.error || "Failed to regenerate plan")
+      }
+      toast({
+        title: "Plan refreshed",
+        description: "Your meal plan has been updated with fresh suggestions!",
+      })
+      router.refresh()
+    } catch (err) {
+      console.error("[Nutrition] Failed to regenerate plan:", err)
+      toast({
+        title: "Unable to refresh",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const macrosWithCurrent = useMemo(() => {
     return {
@@ -99,9 +135,11 @@ export function NutritionClient({ meals, totals, macros, supplements }: Nutritio
               <h1 className="text-2xl font-bold text-white">Nutrition Plan</h1>
               <p className="text-white/70">Today's meal plan</p>
             </div>
-            <ButtonGlow variant="outline-glow" size="icon" onClick={() => router.push("/tools")} className="h-8 w-8">
-              <Settings className="h-4 w-4" />
-            </ButtonGlow>
+            <Link href="/tools">
+              <ButtonGlow variant="outline-glow" size="icon" className="h-8 w-8">
+                <Settings className="h-4 w-4" />
+              </ButtonGlow>
+            </Link>
           </div>
         </motion.div>
 
@@ -197,13 +235,73 @@ export function NutritionClient({ meals, totals, macros, supplements }: Nutritio
           </div>
         </motion.div>
 
+        <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-125">
+          <h2 className="mb-3 text-lg font-bold text-white">Tomorrow's Plan</h2>
+
+          <div className="space-y-3">
+            {tomorrowMeals.length === 0 ? (
+              <p className="text-sm text-white/60">Creating a fresh plan for tomorrow...</p>
+            ) : (
+              tomorrowMeals.map((meal) => (
+                <Card
+                  key={`tomorrow-${meal.type}`}
+                  className="overflow-hidden border-white/10 bg-black/40 backdrop-blur-sm"
+                >
+                  <CardContent className="p-0">
+                    <div className="flex">
+                      <div className="h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5">
+                        <img
+                          src={meal.image || "/placeholder.svg"}
+                          alt={meal.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="flex flex-1 flex-col justify-between p-3">
+                        <div>
+                          <span className="text-xs font-medium text-accent">{meal.type}</span>
+                          <h3 className="font-medium text-white">{meal.name}</h3>
+                          {meal.description ? (
+                            <p className="text-xs text-white/60">{meal.description}</p>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-white/70">{meal.calories} kcal</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openSwapModal(meal)}
+                              className="flex items-center justify-center w-8 h-8 rounded-full bg-accent/20 hover:bg-accent/30 transition-all group"
+                              title="Swap this meal"
+                              type="button"
+                            >
+                              <RotateCcw className="h-4 w-4 text-accent group-hover:rotate-180 transition-transform duration-300" />
+                            </button>
+                            <ChevronRight className="h-4 w-4 text-white/40" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </motion.div>
+
         <div className="flex gap-3 mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-150">
-          <ButtonGlow variant="outline-glow" className="flex-1" onClick={() => router.refresh()}>
-            <RefreshCw className="mr-2 h-4 w-4" /> Refresh Plan
+          <ButtonGlow
+            variant="outline-glow"
+            className="flex-1"
+            onClick={handleRefreshPlan}
+            disabled={isRefreshing}
+            type="button"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /> {isRefreshing ? "Refreshing..." : "Refresh Plan"}
           </ButtonGlow>
-          <ButtonGlow variant="accent-glow" className="flex-1" onClick={() => router.push("/grocery-list")}>
-            <ShoppingCart className="mr-2 h-4 w-4" /> Grocery List
-          </ButtonGlow>
+          <Link href="/grocery-list" className="flex-1">
+            <ButtonGlow variant="accent-glow" className="w-full" type="button">
+              <ShoppingCart className="mr-2 h-4 w-4" /> Grocery List
+            </ButtonGlow>
+          </Link>
         </div>
 
         <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-200">
@@ -229,9 +327,11 @@ export function NutritionClient({ meals, totals, macros, supplements }: Nutritio
                 ))}
               </div>
 
-              <ButtonGlow variant="accent-glow" className="mt-3 w-full" size="sm" onClick={() => router.push("/tools")}>
-                View All Supplements
-              </ButtonGlow>
+              <Link href="/tools" className="block mt-3">
+                <ButtonGlow variant="accent-glow" className="w-full" size="sm" type="button">
+                  View All Supplements
+                </ButtonGlow>
+              </Link>
             </CardContent>
           </Card>
         </motion.div>

@@ -25,7 +25,7 @@ export const NavigationLoading = memo(function NavigationLoading() {
         // Small delay before showing loading to avoid flashing on fast navigations
         timeoutRef.current = setTimeout(() => {
           setIsLoading(true)
-        }, 100)
+        }, 250)
       }
     }
   }, [pathname])

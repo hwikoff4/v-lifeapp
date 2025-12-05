@@ -112,6 +112,299 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
   },
 ]
 
+type ProfileInfo = {
+  weight?: number | null
+  goal_weight?: number | null
+  primary_goal?: string | null
+  activity_level?: number | null
+  age?: number | null
+  gender?: string | null
+  height_feet?: number | null
+  height_inches?: number | null
+  allergies?: string[] | null
+  custom_restrictions?: string[] | null
+}
+
+interface GeneratedMeal {
+  type: MealType
+  name: string
+  description: string | null
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  image?: string | null
+  recipe?: string | null
+  ingredients?: string[] | null
+}
+
+async function fetchProfileInfo(userId: string, supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data } = await supabase
+    .from("profiles")
+    .select("weight, goal_weight, primary_goal, activity_level, age, gender, height_feet, height_inches, allergies, custom_restrictions")
+    .eq("id", userId)
+    .maybeSingle()
+
+  return (data as ProfileInfo) ?? null
+}
+
+function normalizeMealType(value?: string): MealType | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  switch (normalized) {
+    case "breakfast":
+      return "Breakfast"
+    case "lunch":
+      return "Lunch"
+    case "dinner":
+      return "Dinner"
+    case "snack":
+      return "Snack"
+    default:
+      return null
+  }
+}
+
+function buildMacroTargets(profile?: ProfileInfo): Macros {
+  const safeBaseWeight = Number(profile?.weight ?? 170) || 170
+  const fallbackGoalWeight = profile?.goal_weight ?? profile?.weight ?? safeBaseWeight
+  const goalWeight = Number(fallbackGoalWeight) || safeBaseWeight
+  const normalizedGoal = (profile?.primary_goal ?? "").toLowerCase().replace(/_/g, "-")
+  const losingWeight = normalizedGoal === "lose-weight"
+  const calorieMultiplier = losingWeight ? 11 : 13
+  const calorieTarget = Math.round(goalWeight * calorieMultiplier) || 2200
+  const proteinTarget = Math.round(goalWeight * 0.9) || 150
+  const carbsTarget = Math.round((calorieTarget * 0.4) / 4) || 220
+  const fatTarget = Math.round((calorieTarget * 0.25) / 9) || 70
+
+  return {
+    calories: { current: 0, target: calorieTarget },
+    protein: { current: 0, target: proteinTarget, unit: "g" },
+    carbs: { current: 0, target: carbsTarget, unit: "g" },
+    fat: { current: 0, target: fatTarget, unit: "g" },
+  }
+}
+
+function selectFallbackMeals(missingTypes: MealType[]): GeneratedMeal[] {
+  return missingTypes.map((type) => {
+    const pool = DEFAULT_MEALS.filter((meal) => meal.meal_type === type)
+    const candidate =
+      pool[Math.floor(Math.random() * pool.length)] ?? DEFAULT_MEALS.find((meal) => meal.meal_type === type) ?? DEFAULT_MEALS[0]
+
+    return {
+      type,
+      name: candidate.name,
+      description: candidate.description,
+      calories: candidate.calories,
+      protein: candidate.protein,
+      carbs: candidate.carbs,
+      fat: candidate.fat,
+      image: getMealImage(candidate.name),
+    }
+  })
+}
+
+function convertHeightToCm(feet?: number | null, inches?: number | null): number {
+  const f = feet ?? 5
+  const i = inches ?? 8
+  return Math.round((f * 12 + i) * 2.54) // Convert inches to cm
+}
+
+function convertWeightToKg(lbs?: number | null): number {
+  return Math.round((lbs ?? 170) * 0.453592) // Convert lbs to kg
+}
+
+function mapActivityLevel(level?: number | null): string {
+  switch (level) {
+    case 1:
+      return "sedentary"
+    case 2:
+      return "lightly_active"
+    case 3:
+      return "moderately_active"
+    case 4:
+      return "very_active"
+    case 5:
+      return "extra_active"
+    default:
+      return "moderately_active"
+  }
+}
+
+function mapFitnessGoal(goal?: string | null): string {
+  switch (goal?.toLowerCase().replace(/-/g, "_")) {
+    case "lose_weight":
+    case "lose-weight":
+      return "lose_weight"
+    case "build_muscle":
+    case "build-muscle":
+      return "build_muscle"
+    case "tone_up":
+    case "tone-up":
+      return "tone_up"
+    default:
+      return "maintain"
+  }
+}
+
+async function generateAIMeals(params: {
+  mealTypes: MealType[]
+  macros: Macros
+  profile?: ProfileInfo | null
+  supabase: Awaited<ReturnType<typeof createClient>>
+  date?: string
+}): Promise<GeneratedMeal[]> {
+  if (params.mealTypes.length === 0) {
+    return []
+  }
+
+  try {
+    // Get auth session for the edge function call
+    const { data: { session } } = await params.supabase.auth.getSession()
+    if (!session?.access_token) {
+      console.error("[Nutrition] No auth session for edge function call")
+      return []
+    }
+
+    const profile = params.profile
+    const heightCm = convertHeightToCm(profile?.height_feet, profile?.height_inches)
+    const weightKg = convertWeightToKg(profile?.weight)
+    const age = profile?.age ?? 30
+    const gender = profile?.gender ?? "male"
+    const activityLevel = mapActivityLevel(profile?.activity_level)
+    const fitnessGoal = mapFitnessGoal(profile?.primary_goal)
+
+    const requestBody = {
+      type: "meal-plan",
+      profile: {
+        weight: weightKg,
+        height: heightCm,
+        age,
+        gender,
+        activityLevel,
+        fitnessGoal,
+        dietaryPreferences: (profile?.custom_restrictions || []).filter(Boolean),
+        restrictions: (profile?.allergies || []).filter(Boolean),
+      },
+      mealTypes: params.mealTypes,
+      date: params.date || new Date().toISOString().split("T")[0],
+    }
+
+    // Call the Supabase edge function
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!supabaseUrl) {
+      console.error("[Nutrition] NEXT_PUBLIC_SUPABASE_URL not configured")
+      return []
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/ai-planner`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("[Nutrition] Edge function error:", response.status, errorText)
+      return []
+    }
+
+    const result = await response.json()
+
+    if (!result.success || !Array.isArray(result.data)) {
+      console.error("[Nutrition] Unexpected edge function response:", result)
+      return []
+    }
+
+    // Map the response to our GeneratedMeal format
+    const meals = result.data as Array<{
+      type: string
+      name: string
+      description?: string
+      calories: number
+      protein: number
+      carbs: number
+      fat: number
+      ingredients?: string[]
+      instructions?: string[]
+    }>
+
+    const normalized = meals
+      .map((meal) => {
+        const type = normalizeMealType(meal.type)
+        if (!type || !meal.name) return null
+
+        return {
+          type,
+          name: meal.name.trim(),
+          description: meal.description ?? null,
+          calories: Number(meal.calories ?? 0),
+          protein: Number(meal.protein ?? 0),
+          carbs: Number(meal.carbs ?? 0),
+          fat: Number(meal.fat ?? 0),
+          image: getMealImage(meal.name),
+          recipe: meal.instructions?.join("\n") ?? null,
+          ingredients: Array.isArray(meal.ingredients) ? meal.ingredients : null,
+        }
+      })
+      .filter(Boolean) as GeneratedMeal[]
+
+    console.log("[Nutrition] AI generated", normalized.length, "meals via edge function")
+    return normalized.filter((meal) => params.mealTypes.includes(meal.type))
+  } catch (error) {
+    console.error("[Nutrition] Failed to generate AI meals via edge function:", error)
+    return []
+  }
+}
+
+async function persistGeneratedMeals(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  meals: GeneratedMeal[],
+  dayStart: Date,
+) {
+  if (meals.length === 0) return
+
+  const rows = meals.map((meal) => ({
+    user_id: userId,
+    meal_type: meal.type,
+    name: meal.name,
+    description: meal.description,
+    calories: Math.round(meal.calories || 0),
+    protein: Number(meal.protein ?? 0),
+    carbs: Number(meal.carbs ?? 0),
+    fat: Number(meal.fat ?? 0),
+    image_url: meal.image || getMealImage(meal.name),
+    recipe: meal.recipe ?? null,
+    ingredients: meal.ingredients ?? null,
+  }))
+
+  const { data: insertedMeals, error } = await supabase
+    .from("meals")
+    .insert(rows)
+    .select("id, meal_type")
+
+  if (error || !insertedMeals || insertedMeals.length === 0) {
+    console.error("[Nutrition] Failed to persist generated meals:", error)
+    return
+  }
+
+  const logRows = insertedMeals.map((inserted) => ({
+    user_id: userId,
+    meal_id: inserted.id,
+    meal_type: inserted.meal_type,
+    consumed_at: dayStart.toISOString(),
+  }))
+
+  const { error: logError } = await supabase.from("meal_logs").insert(logRows)
+  if (logError) {
+    console.error("[Nutrition] Failed to persist meal logs:", logError)
+  }
+}
+
 async function ensureMealCatalog(userId: string, supabase: Awaited<ReturnType<typeof createClient>>) {
   const { count } = await supabase
     .from("meals")
@@ -128,7 +421,13 @@ async function ensureMealCatalog(userId: string, supabase: Awaited<ReturnType<ty
   }
 }
 
-async function ensureDailyMealLogs(userId: string, supabase: Awaited<ReturnType<typeof createClient>>, dayStart: Date, dayEnd: Date) {
+async function ensureDailyMealLogs(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dayStart: Date,
+  dayEnd: Date,
+  profileInfo?: ProfileInfo | null,
+) {
   const { data: logs } = await supabase
     .from("meal_logs")
     .select("id, meal_type")
@@ -136,50 +435,33 @@ async function ensureDailyMealLogs(userId: string, supabase: Awaited<ReturnType<
     .gte("consumed_at", dayStart.toISOString())
     .lte("consumed_at", dayEnd.toISOString())
 
-  const existingTypes = new Set((logs || []).map((log) => log.meal_type))
+  const existingTypes = new Set((logs || []).map((log) => log.meal_type as MealType))
 
   if (existingTypes.size === MEAL_TYPES.length) {
     return
   }
 
-  for (const type of MEAL_TYPES) {
-    if (existingTypes.has(type)) continue
-    const { data: meal } = await supabase
-      .from("meals")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("meal_type", type)
-      .limit(1)
-      .maybeSingle()
-
-    if (!meal) continue
-
-    await supabase.from("meal_logs").insert({
-      user_id: userId,
-      meal_id: meal.id,
-      meal_type: type,
-      consumed_at: dayStart.toISOString(),
-    })
+  const missingTypes = MEAL_TYPES.filter((type) => !existingTypes.has(type))
+  if (missingTypes.length === 0) {
+    return
   }
+
+  const profile = profileInfo ?? (await fetchProfileInfo(userId, supabase))
+  const macros = buildMacroTargets(profile)
+  const dateStr = dayStart.toISOString().split("T")[0]
+  const aiMeals = await generateAIMeals({ mealTypes: missingTypes, macros, profile, supabase, date: dateStr })
+  const mealsToPersist = aiMeals.length > 0 ? aiMeals : selectFallbackMeals(missingTypes)
+
+  await persistGeneratedMeals(userId, supabase, mealsToPersist, dayStart)
 }
 
-export async function getDailyMealPlan() {
-  const { user, error } = await getAuthUser()
-  if (error || !user) {
-    return { meals: [] as DailyMeal[], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } }
-  }
-
-  const supabase = await createClient()
-  await ensureMealCatalog(user.id, supabase)
-
-  const dayStart = new Date()
-  dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(dayStart)
-  dayEnd.setHours(23, 59, 59, 999)
-
-  await ensureDailyMealLogs(user.id, supabase, dayStart, dayEnd)
-
-  const { data, error: fetchError } = await supabase
+async function fetchMealsForDate(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dayStart: Date,
+  dayEnd: Date,
+) {
+  const { data, error } = await supabase
     .from("meal_logs")
     .select(
       `
@@ -198,33 +480,94 @@ export async function getDailyMealPlan() {
         )
       `,
     )
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .gte("consumed_at", dayStart.toISOString())
     .lte("consumed_at", dayEnd.toISOString())
 
-  if (fetchError || !data) {
-    console.error("[Nutrition] Failed to load meal logs:", fetchError)
-    return { meals: [] as DailyMeal[], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } }
+  if (error || !data) {
+    console.error("[Nutrition] Failed to load meal logs:", error)
+    return []
   }
 
-  const meals: DailyMeal[] = data
-    .map((log) => {
-      if (!log.meals) return null
-      return {
-        logId: log.id,
-        mealId: log.meals.id,
-        type: (log.meal_type as MealType) || (log.meals.meal_type as MealType),
-        name: log.meals.name,
-        calories: Number(log.meals.calories || 0),
-        protein: Number(log.meals.protein || 0),
-        carbs: Number(log.meals.carbs || 0),
-        fat: Number(log.meals.fat || 0),
-        image: log.meals.image_url || getMealImage(log.meals.name),
-      }
-    })
-    .filter(Boolean) as DailyMeal[]
+  const sortedLogs = (data || [])
+    .filter((log) => log.meals)
+    .sort((a, b) => new Date(b.consumed_at).getTime() - new Date(a.consumed_at).getTime())
 
-  const totals = meals.reduce(
+  const mealMap = new Map<MealType, DailyMeal>()
+
+  for (const log of sortedLogs) {
+    if (!log.meals) continue
+    const type = (log.meal_type as MealType) || (log.meals.meal_type as MealType)
+    if (!type || mealMap.has(type)) continue
+
+    mealMap.set(type, {
+      logId: log.id,
+      mealId: log.meals.id,
+      type,
+      name: log.meals.name,
+      calories: Number(log.meals.calories || 0),
+      protein: Number(log.meals.protein || 0),
+      carbs: Number(log.meals.carbs || 0),
+      fat: Number(log.meals.fat || 0),
+      image: log.meals.image_url || getMealImage(log.meals.name),
+    })
+  }
+
+  return Array.from(mealMap.values())
+}
+
+async function getMealPlanForDate(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  targetDate: Date,
+  profileInfo?: ProfileInfo | null,
+) {
+  const dayStart = new Date(targetDate)
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(dayStart)
+  dayEnd.setHours(23, 59, 59, 999)
+
+  await ensureDailyMealLogs(userId, supabase, dayStart, dayEnd, profileInfo)
+  return fetchMealsForDate(userId, supabase, dayStart, dayEnd)
+}
+
+async function safeFetchMealsForDate(
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  targetDate: Date,
+  profile?: ProfileInfo | null,
+) {
+  try {
+    return await getMealPlanForDate(userId, supabase, targetDate, profile)
+  } catch (error) {
+    console.error("[Nutrition] Unable to build plan for date:", targetDate, error)
+    return []
+  }
+}
+
+export async function getDailyMealPlan() {
+  const { user, error } = await getAuthUser()
+  if (error || !user) {
+    return {
+      meals: [] as DailyMeal[],
+      totals: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      tomorrowMeals: [] as DailyMeal[],
+    }
+  }
+
+  const supabase = await createClient()
+  await ensureMealCatalog(user.id, supabase)
+
+  const profile = await fetchProfileInfo(user.id, supabase)
+
+  const dayStart = new Date()
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(dayStart)
+  dayEnd.setHours(23, 59, 59, 999)
+
+  const todayMeals = await safeFetchMealsForDate(user.id, supabase, dayStart, profile)
+
+  const totals = todayMeals.reduce(
     (acc, meal) => {
       acc.calories += meal.calories
       acc.protein += meal.protein
@@ -235,7 +578,11 @@ export async function getDailyMealPlan() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
   )
 
-  return { meals, totals }
+  const tomorrowDate = new Date(dayStart)
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const tomorrowMeals = await safeFetchMealsForDate(user.id, supabase, tomorrowDate, profile)
+
+  return { meals: todayMeals, totals, tomorrowMeals }
 }
 
 export async function swapMeal(logId: string, mealId: string) {
@@ -314,24 +661,8 @@ export async function getNutritionTargets(): Promise<{ macros: Macros }> {
   }
 
   const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("weight, goal_weight, primary_goal")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  const baseWeight = Number(profile?.weight || 170)
-  const goalWeight = Number(profile?.goal_weight || baseWeight)
-  const calorieTarget = Math.round((profile?.primary_goal === "lose_weight" ? goalWeight * 11 : goalWeight * 13) || 2200)
-
-  const macros: Macros = {
-    calories: { current: 0, target: calorieTarget },
-    protein: { current: 0, target: Math.round(baseWeight * 0.9), unit: "g" },
-    carbs: { current: 0, target: Math.round((calorieTarget * 0.4) / 4), unit: "g" },
-    fat: { current: 0, target: Math.round((calorieTarget * 0.25) / 9), unit: "g" },
-  }
-
-  return { macros }
+  const profile = await fetchProfileInfo(user.id, supabase)
+  return { macros: buildMacroTargets(profile) }
 }
 
 export async function getRecommendedSupplements(limit = 3) {
@@ -345,5 +676,52 @@ export async function getRecommendedSupplements(limit = 3) {
   return data || []
 }
 
-export type { DailyMeal }
+export async function regenerateMealPlan() {
+  const { user, error } = await getAuthUser()
+  if (error || !user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  const supabase = await createClient()
+  const profile = await fetchProfileInfo(user.id, supabase)
+  const macros = buildMacroTargets(profile)
+
+  // Set up date ranges for today and tomorrow
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const tomorrowStart = new Date(todayStart)
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1)
+  const tomorrowEnd = new Date(tomorrowStart)
+  tomorrowEnd.setHours(23, 59, 59, 999)
+
+  // Delete existing meal logs for today AND tomorrow
+  const { error: deleteError } = await supabase
+    .from("meal_logs")
+    .delete()
+    .eq("user_id", user.id)
+    .gte("consumed_at", todayStart.toISOString())
+    .lte("consumed_at", tomorrowEnd.toISOString())
+
+  if (deleteError) {
+    console.error("[Nutrition] Failed to delete meal logs:", deleteError)
+    return { success: false, error: "Unable to clear existing plan" }
+  }
+
+  // Generate fresh AI meals for today
+  const todayDateStr = todayStart.toISOString().split("T")[0]
+  const todayAiMeals = await generateAIMeals({ mealTypes: [...MEAL_TYPES], macros, profile, supabase, date: todayDateStr })
+  const todayMealsToPersist = todayAiMeals.length > 0 ? todayAiMeals : selectFallbackMeals([...MEAL_TYPES])
+  await persistGeneratedMeals(user.id, supabase, todayMealsToPersist, todayStart)
+
+  // Generate fresh AI meals for tomorrow
+  const tomorrowDateStr = tomorrowStart.toISOString().split("T")[0]
+  const tomorrowAiMeals = await generateAIMeals({ mealTypes: [...MEAL_TYPES], macros, profile, supabase, date: tomorrowDateStr })
+  const tomorrowMealsToPersist = tomorrowAiMeals.length > 0 ? tomorrowAiMeals : selectFallbackMeals([...MEAL_TYPES])
+  await persistGeneratedMeals(user.id, supabase, tomorrowMealsToPersist, tomorrowStart)
+
+  revalidatePath("/nutrition")
+  return { success: true }
+}
+
+export type { DailyMeal, MealType }
 

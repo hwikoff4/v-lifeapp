@@ -3,7 +3,6 @@
 import type React from "react"
 
 import { createClient } from "@/lib/supabase/client"
-import { createProfile } from "@/lib/actions/profile"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -89,17 +88,8 @@ export default function SignUpPage() {
         return
       }
 
-      console.log("[v0] Creating profile for user:", data.user.id)
-      const result = await createProfile(data.user.id)
-
-      if (result.error) {
-        console.error("[v0] Profile creation error:", result.error)
-        // Still allow signup to proceed even if profile creation fails
-        // User can complete onboarding which will create/update profile
-        console.warn("[v0] Continuing despite profile creation error")
-      } else {
-        console.log("[v0] Profile created successfully")
-      }
+      // Profile is automatically created by database trigger on user signup
+      console.log("[v0] User created successfully:", data.user.id)
 
       if (data.session) {
         console.log("[v0] Session exists, redirecting to onboarding")

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { env } from "@/lib/env"
 
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = ["/auth", "/privacy-policy", "/terms-of-service"]
@@ -17,8 +18,8 @@ export async function updateSession(request: NextRequest) {
     })
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       {
         cookies: {
           getAll() {
@@ -35,20 +36,10 @@ export async function updateSession(request: NextRequest) {
       },
     )
 
-    // Fast path: Check session first (doesn't refresh, faster)
+    // Single call - refreshes session if needed and returns user
     const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    // Only call getUser() if we have a session (to refresh it)
-    // This avoids unnecessary API calls for unauthenticated requests
-    let user = session?.user || null
-    if (session) {
-      const {
-        data: { user: refreshedUser },
-      } = await supabase.auth.getUser()
-      user = refreshedUser
-    }
+      data: { user },
+    } = await supabase.auth.getUser()
 
     // Redirect unauthenticated users to login
     if (!user) {
@@ -67,8 +58,8 @@ export async function updateSession(request: NextRequest) {
     })
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       {
         cookies: {
           getAll() {
@@ -85,12 +76,13 @@ export async function updateSession(request: NextRequest) {
       },
     )
 
+    // Use getUser() to refresh session and validate auth
     const {
-      data: { session },
-    } = await supabase.auth.getSession()
+      data: { user },
+    } = await supabase.auth.getUser()
 
     // Redirect authenticated users away from auth pages
-    if (session?.user) {
+    if (user) {
       const url = request.nextUrl.clone()
       url.pathname = "/dashboard"
       return NextResponse.redirect(url)

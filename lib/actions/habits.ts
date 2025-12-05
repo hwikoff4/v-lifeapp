@@ -67,33 +67,41 @@ export async function getUserHabits(): Promise<HabitsResult> {
   const timezone = await getUserTimezone()
   const today = getTodayInTimezone(timezone)
 
-  // Fetch habits and logs in parallel
-  const [habits, logsResult] = await Promise.all([
-    getCachedHabits(user.id),
-    supabase
-      .from("habit_logs")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("logged_at", today)
-  ])
+  try {
+    // Fetch habits and logs in parallel
+    const [habits, logsResult] = await Promise.all([
+      getCachedHabits(user.id).catch((err) => {
+        console.error("[Habits] Error fetching cached habits:", err)
+        return [] // Return empty array on error
+      }),
+      supabase
+        .from("habit_logs")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("logged_at", today)
+    ])
 
-  if (!habits) {
-    return { habits: [], error: null }
-  }
-
-  const logs = logsResult.data
-
-  // Merge habits with today's completion status
-  const habitsWithStatus: HabitWithStatus[] = habits.map((habit) => {
-    const log = logs?.find((l) => l.habit_id === habit.id)
-    return {
-      ...habit,
-      completed: log?.completed || false,
-      logId: log?.id || null,
+    if (!habits || habits.length === 0) {
+      return { habits: [], error: null }
     }
-  })
 
-  return { habits: habitsWithStatus, error: null }
+    const logs = logsResult.data
+
+    // Merge habits with today's completion status
+    const habitsWithStatus: HabitWithStatus[] = habits.map((habit) => {
+      const log = logs?.find((l) => l.habit_id === habit.id)
+      return {
+        ...habit,
+        completed: log?.completed || false,
+        logId: log?.id || null,
+      }
+    })
+
+    return { habits: habitsWithStatus, error: null }
+  } catch (error) {
+    console.error("[Habits] Unexpected error in getUserHabits:", error)
+    return { habits: [], error: error instanceof Error ? error.message : "Failed to fetch habits" }
+  }
 }
 
 export async function toggleHabitCompletion(
@@ -184,7 +192,7 @@ export async function toggleHabitCompletion(
   return { success: true, error: null }
 }
 
-export async function createDefaultHabits(): Promise<{ success: boolean; error: string | null; message?: string }> {
+export async function createDefaultHabits(skipRevalidation = false): Promise<{ success: boolean; error: string | null; message?: string }> {
   const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
@@ -226,7 +234,10 @@ export async function createDefaultHabits(): Promise<{ success: boolean; error: 
     return { success: false, error: insertError.message }
   }
 
-  revalidateTag("user-habits")
+  // Skip revalidation when called during render (e.g., from Server Components)
+  if (!skipRevalidation) {
+    revalidateTag("user-habits")
+  }
   return { success: true, error: null }
 }
 

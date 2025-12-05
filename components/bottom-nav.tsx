@@ -1,7 +1,7 @@
 "use client"
 
-import { memo } from "react"
-import { usePathname } from "next/navigation"
+import { memo, useEffect } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Home, Dumbbell, Utensils, Users, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -44,7 +44,21 @@ const NavItem = memo(function NavItem({
 
 export const BottomNav = memo(function BottomNav() {
   const pathname = usePathname()
+  const router = useRouter()
   const isVBotActive = pathname === "/vbot"
+
+  // Prefetch main app routes to reduce perceived navigation latency
+  useEffect(() => {
+    const routesToPrefetch = ["/dashboard", "/fitness", "/nutrition", "/community", "/vbot", "/settings"]
+    routesToPrefetch.forEach((route) => {
+      try {
+        // Next.js prefetch returns void in the App Router, so just fire and forget
+        router.prefetch(route)
+      } catch {
+        // Ignore prefetch errors (e.g., during development or offline)
+      }
+    })
+  }, [router])
 
   return (
     <div className="fixed bottom-0 left-0 z-50 w-full border-t border-white/10 bg-black/90 backdrop-blur-lg pb-safe">

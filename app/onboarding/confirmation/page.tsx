@@ -8,7 +8,7 @@ import { ButtonGlow } from "@/components/ui/button-glow"
 import { useOnboarding } from "@/lib/contexts/onboarding-context"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
-import { retryWithBackoff, isNetworkError } from "@/lib/utils/retry"
+import { isNetworkError } from "@/lib/utils/retry"
 
 export default function Confirmation() {
   const router = useRouter()
@@ -17,9 +17,10 @@ export default function Confirmation() {
   const [isSaving, setIsSaving] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isChecking, setIsChecking] = useState(true)
-  const [retryAttempt, setRetryAttempt] = useState(0)
 
   useEffect(() => {
+    console.log("[Onboarding] Confirmation page loaded with data:", data)
+    
     const checkAuth = async () => {
       const supabase = createClient()
       const {
@@ -27,7 +28,7 @@ export default function Confirmation() {
         error,
       } = await supabase.auth.getSession()
 
-      console.log("[v0] Auth check:", {
+      console.log("[Onboarding] Auth check:", {
         hasSession: !!session,
         userId: session?.user?.id,
         error: error?.message,
@@ -47,115 +48,32 @@ export default function Confirmation() {
     }
 
     checkAuth()
-  }, [router, toast])
+  }, [router, toast, data])
 
   const saveProfile = async () => {
     setIsSaving(true)
-    setRetryAttempt(0)
-    const supabase = createClient()
+
+    console.log("[Onboarding] Saving profile with data:", data)
 
     try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession()
+      if (!data.name || data.name.trim() === "") {
+        console.error("[Onboarding] Name is missing! Full data:", data)
+        throw new Error("Name is required. Please go back and complete your profile.")
+      }
 
-      console.log("[v0] Saving profile - Session check:", {
-        hasSession: !!session,
-        userId: session?.user?.id,
-        userEmail: session?.user?.email,
-        error: sessionError?.message,
+      const response = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
       })
 
-      if (sessionError || !session?.user) {
-        throw new Error("User not authenticated")
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || "Failed to save profile")
       }
-
-      if (!data.name || data.name.trim() === "") {
-        throw new Error("Name is required")
-      }
-
-      const profileData: any = {
-        id: session.user.id,
-        name: data.name.trim(),
-        updated_at: new Date().toISOString(),
-      }
-
-      // Add optional fields only if they have valid values
-      if (data.age && Number.parseInt(data.age) > 0) {
-        profileData.age = Number.parseInt(data.age)
-      }
-
-      if (data.gender && ["male", "female", "other"].includes(data.gender)) {
-        profileData.gender = data.gender
-      }
-
-      if (data.heightFeet && Number.parseInt(data.heightFeet) > 0) {
-        profileData.height_feet = Number.parseInt(data.heightFeet)
-      }
-
-      if (data.heightInches && Number.parseInt(data.heightInches) >= 0) {
-        profileData.height_inches = Number.parseInt(data.heightInches)
-      }
-
-      if (data.weight && Number.parseFloat(data.weight) > 0) {
-        profileData.weight = Number.parseFloat(data.weight)
-      }
-
-      if (data.gymAccess && ["home", "hotel", "commercial", "none", "gym", "custom"].includes(data.gymAccess)) {
-        profileData.gym_access = data.gymAccess
-      }
-
-      if (data.selectedGym) {
-        profileData.selected_gym = data.selectedGym
-      }
-
-      if (data.customEquipment) {
-        profileData.custom_equipment = data.customEquipment
-      }
-
-      if (data.activityLevel && data.activityLevel >= 1 && data.activityLevel <= 5) {
-        profileData.activity_level = data.activityLevel
-      }
-
-      if (data.primaryGoal && ["lose-weight", "tone-up", "build-muscle", "lifestyle"].includes(data.primaryGoal)) {
-        profileData.primary_goal = data.primaryGoal
-      }
-
-      if (data.allergies && Array.isArray(data.allergies)) {
-        profileData.allergies = data.allergies
-      }
-
-      if (data.customRestrictions && Array.isArray(data.customRestrictions)) {
-        profileData.custom_restrictions = data.customRestrictions
-      }
-
-      profileData.onboarding_completed = true
-
-      console.log("[v0] Profile data to save:", profileData)
-
-      await retryWithBackoff(
-        async () => {
-          const { error: profileError } = await supabase.from("profiles").upsert(profileData, {
-            onConflict: "id",
-          })
-
-          if (profileError) {
-            console.error("[v0] Profile upsert error:", profileError)
-            throw profileError
-          }
-        },
-        {
-          maxAttempts: 3,
-          initialDelay: 1000,
-          onRetry: (attempt) => {
-            setRetryAttempt(attempt)
-            console.log(`[v0] Retry attempt ${attempt} for profile save`)
-          },
-        },
-      )
-
-      console.log("[v0] Profile saved successfully, redirecting to dashboard")
 
       toast({
         title: "Profile saved!",
@@ -165,17 +83,19 @@ export default function Confirmation() {
       clearData()
       await new Promise((resolve) => setTimeout(resolve, 500))
       router.push("/dashboard")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[v0] Error saving profile:", error)
 
       let errorMessage = "Please try again or contact support."
 
-      if (isNetworkError(error)) {
-        errorMessage = "Network connection issue. Please check your internet and try again."
-      } else if (error.message?.includes("check constraint")) {
-        errorMessage = "Some profile information is invalid. Please review your inputs."
-      } else if (error.message) {
-        errorMessage = error.message
+      if (error instanceof Error) {
+        if (isNetworkError(error)) {
+          errorMessage = "Network connection issue. Please check your internet and try again."
+        } else if (error.message?.includes("check constraint")) {
+          errorMessage = "Some profile information is invalid. Please review your inputs."
+        } else if (error.message) {
+          errorMessage = error.message
+        }
       }
 
       toast({
@@ -185,7 +105,6 @@ export default function Confirmation() {
       })
     } finally {
       setIsSaving(false)
-      setRetryAttempt(0)
     }
   }
 
@@ -201,6 +120,9 @@ export default function Confirmation() {
   if (!isAuthenticated) {
     return null
   }
+
+  // Check if onboarding data is missing
+  const hasRequiredData = data.name && data.name.trim() !== ""
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-black to-charcoal p-4">
@@ -230,7 +152,7 @@ export default function Confirmation() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          Profile Complete!
+          {hasRequiredData ? "Profile Complete!" : "Profile Data Missing"}
         </motion.h1>
 
         <motion.p
@@ -239,26 +161,39 @@ export default function Confirmation() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
-          We're generating your personalized fitness and nutrition plan.
+          {hasRequiredData 
+            ? "We're generating your personalized fitness and nutrition plan."
+            : "It looks like your profile information wasn't saved. Please go back and complete your profile."}
         </motion.p>
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-          <ButtonGlow
-            variant="accent-glow"
-            size="lg"
-            onClick={saveProfile}
-            disabled={isSaving}
-            className="text-base font-semibold"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {retryAttempt > 0 ? `Retrying (${retryAttempt}/3)...` : "Saving Profile..."}
-              </>
-            ) : (
-              "Generate My Plan"
-            )}
-          </ButtonGlow>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="space-y-3">
+          {hasRequiredData ? (
+            <ButtonGlow
+              variant="accent-glow"
+              size="lg"
+              onClick={saveProfile}
+              disabled={isSaving}
+              className="text-base font-semibold"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving Profile...
+                </>
+              ) : (
+                "Generate My Plan"
+              )}
+            </ButtonGlow>
+          ) : (
+            <ButtonGlow
+              variant="accent-glow"
+              size="lg"
+              onClick={() => router.push("/onboarding/profile")}
+              className="text-base font-semibold"
+            >
+              Go Back to Profile
+            </ButtonGlow>
+          )}
         </motion.div>
       </motion.div>
     </div>
