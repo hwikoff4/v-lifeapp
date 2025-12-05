@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,15 +16,24 @@ interface ManageSubscriptionModalProps {
 export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionModalProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
+  const [subscription, setSubscription] = useState<{
+    plan: string
+    status: string
+    billing_cycle: string
+    price: number
+    next_billing_date: string | null
+    payment_method_last4?: string | null
+  } | null>(null)
 
-  // Mock subscription data - in a real app, this would come from your backend/Stripe
-  const currentPlan = {
-    name: "Pro",
-    price: 29.99,
-    billingCycle: "monthly",
-    nextBillingDate: "November 30, 2025",
-    status: "active",
-  }
+  useEffect(() => {
+    if (!isOpen) return
+    const loadSubscription = async () => {
+      const { getSubscription } = await import("@/lib/actions/subscription")
+      const record = await getSubscription()
+      setSubscription(record)
+    }
+    loadSubscription()
+  }, [isOpen])
 
   const plans = [
     {
@@ -67,15 +76,24 @@ export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionM
 
   const handleChangePlan = async (planId: string) => {
     setLoading(true)
-
-    // Simulate API call - in a real app, this would call your backend/Stripe
-    setTimeout(() => {
+    const { changeSubscriptionPlan } = await import("@/lib/actions/subscription")
+    const result = await changeSubscriptionPlan(planId as "free" | "pro" | "elite")
+    setLoading(false)
+    if (!result.success) {
       toast({
-        title: "Plan Change Requested",
-        description: "Your subscription change is being processed. You'll receive a confirmation email shortly.",
+        title: "Unable to change plan",
+        description: result.error || "Please try again.",
+        variant: "destructive",
       })
-      setLoading(false)
-    }, 1500)
+      return
+    }
+    toast({
+      title: "Plan updated",
+      description: `You're now on the ${planId} plan.`,
+    })
+    const { getSubscription } = await import("@/lib/actions/subscription")
+    const record = await getSubscription()
+    setSubscription(record)
   }
 
   const handleCancelSubscription = async () => {
@@ -84,15 +102,33 @@ export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionM
     }
 
     setLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
+    const { cancelSubscription } = await import("@/lib/actions/subscription")
+    const result = await cancelSubscription()
+    setLoading(false)
+    if (!result.success) {
       toast({
-        title: "Subscription Cancelled",
-        description: "Your subscription has been cancelled. You'll have access until the end of your billing period.",
+        title: "Unable to cancel",
+        description: result.error || "Please try again.",
+        variant: "destructive",
       })
-      setLoading(false)
-    }, 1500)
+      return
+    }
+    toast({
+      title: "Subscription cancelled",
+      description: "You'll have access until the end of your billing period.",
+    })
+    const { getSubscription } = await import("@/lib/actions/subscription")
+    const record = await getSubscription()
+    setSubscription(record)
+  }
+
+  const currentPlan = subscription || {
+    plan: "free",
+    status: "active",
+    billing_cycle: "monthly",
+    price: 0,
+    next_billing_date: null,
+    payment_method_last4: null,
   }
 
   return (
@@ -114,13 +150,13 @@ export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionM
             <CardContent className="p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-white">Current Plan</h3>
-                <Badge className="bg-accent text-black">{currentPlan.status}</Badge>
+                <Badge className="bg-accent text-black capitalize">{currentPlan.status}</Badge>
               </div>
 
               <div className="mb-4">
-                <div className="text-3xl font-bold text-accent">{currentPlan.name}</div>
+                <div className="text-3xl font-bold text-accent capitalize">{currentPlan.plan}</div>
                 <div className="text-white/70">
-                  ${currentPlan.price}/{currentPlan.billingCycle}
+                  ${currentPlan.price}/{currentPlan.billing_cycle}
                 </div>
               </div>
 
@@ -131,11 +167,15 @@ export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionM
                 </div>
                 <div className="flex justify-between">
                   <span>Next Billing Date:</span>
-                  <span className="font-medium text-white">{currentPlan.nextBillingDate}</span>
+                  <span className="font-medium text-white">
+                    {currentPlan.next_billing_date ? currentPlan.next_billing_date : "Not scheduled"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Payment Method:</span>
-                  <span className="font-medium text-white">•••• 4242</span>
+                  <span className="font-medium text-white">
+                    {currentPlan.payment_method_last4 ? `•••• ${currentPlan.payment_method_last4}` : "Not on file"}
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -147,7 +187,7 @@ export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionM
             <div className="space-y-3">
               {plans.map((plan) => {
                 const Icon = plan.icon
-                const isCurrentPlan = plan.name.toLowerCase() === currentPlan.name.toLowerCase()
+                const isCurrentPlan = plan.id === currentPlan.plan
 
                 return (
                   <Card
@@ -186,7 +226,7 @@ export function ManageSubscriptionModal({ isOpen, onClose }: ManageSubscriptionM
                           onClick={() => handleChangePlan(plan.id)}
                           disabled={loading}
                         >
-                          {plan.price > currentPlan.price ? "Upgrade" : plan.price === 0 ? "Downgrade" : "Switch"} to{" "}
+                      {plan.price > currentPlan.price ? "Upgrade" : plan.price === 0 ? "Downgrade" : "Switch"} to{" "}
                           {plan.name}
                         </ButtonGlow>
                       )}

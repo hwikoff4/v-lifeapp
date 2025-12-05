@@ -1,39 +1,65 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Scale, TrendingDown, TrendingUp, Minus } from "lucide-react"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-
-interface WeightEntry {
-  date: string
-  weight: number
-  change?: number
-}
+import { useToast } from "@/hooks/use-toast"
+import type { WeightEntry } from "@/lib/types"
 
 interface UpdateWeightModalProps {
   isOpen: boolean
   onClose: () => void
-  currentWeight: number
-  onUpdate: (weight: number, note?: string) => void
+  currentWeight: number | null
   recentEntries: WeightEntry[]
+  onSuccess?: () => void
 }
 
-export function UpdateWeightModal({ isOpen, onClose, currentWeight, onUpdate, recentEntries }: UpdateWeightModalProps) {
-  const [weight, setWeight] = useState(currentWeight.toString())
+export function UpdateWeightModal({ isOpen, onClose, currentWeight, recentEntries, onSuccess }: UpdateWeightModalProps) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [weight, setWeight] = useState(currentWeight ? currentWeight.toString() : "")
   const [note, setNote] = useState("")
   const [unit, setUnit] = useState<"lbs" | "kg">("lbs")
+  const [isPending, startTransition] = useTransition()
 
   const handleUpdate = () => {
     const weightValue = Number.parseFloat(weight)
-    if (weightValue && weightValue > 0) {
-      onUpdate(weightValue, note.trim() || undefined)
-      setNote("")
-      onClose()
+    if (!weightValue || weightValue <= 0) {
+      toast({
+        title: "Add a valid weight",
+        description: "Please enter a value greater than zero.",
+        variant: "destructive",
+      })
+      return
     }
+
+    startTransition(async () => {
+      const normalized = unit === "kg" ? weightValue * 2.20462 : weightValue
+      const { addWeightEntry } = await import("@/lib/actions/progress")
+      const result = await addWeightEntry(Number(normalized.toFixed(1)), note.trim() || undefined)
+
+      if (result.success) {
+        toast({
+          title: "Weight logged",
+          description: "Nice work staying consistent.",
+        })
+        setNote("")
+        onSuccess?.()
+        router.refresh()
+        onClose()
+      } else {
+        toast({
+          title: "Unable to save",
+          description: result.error || "Please try again.",
+          variant: "destructive",
+        })
+      }
+    })
   }
 
   const getWeightChange = () => {
@@ -41,7 +67,9 @@ export function UpdateWeightModal({ isOpen, onClose, currentWeight, onUpdate, re
     if (!newWeight || recentEntries.length === 0) return null
 
     const lastEntry = recentEntries[recentEntries.length - 1]
-    return newWeight - lastEntry.weight
+    const lastWeight = Number(lastEntry.weight)
+    const displayed = unit === "kg" ? lastWeight / 2.20462 : lastWeight
+    return newWeight - displayed
   }
 
   const weightChange = getWeightChange()
@@ -49,7 +77,7 @@ export function UpdateWeightModal({ isOpen, onClose, currentWeight, onUpdate, re
   const quickAdjustments = [-2, -1, -0.5, 0.5, 1, 2]
 
   const adjustWeight = (adjustment: number) => {
-    const currentValue = Number.parseFloat(weight) || currentWeight
+    const currentValue = Number.parseFloat(weight) || currentWeight || 0
     const newValue = Math.max(0, currentValue + adjustment)
     setWeight(newValue.toFixed(1))
   }
@@ -202,19 +230,21 @@ export function UpdateWeightModal({ isOpen, onClose, currentWeight, onUpdate, re
                           {recentEntries
                             .slice(-5)
                             .reverse()
-                            .map((entry, index) => (
-                              <div key={index} className="flex items-center justify-between text-sm">
-                                <span className="text-white/70">{entry.date}</span>
+                            .map((entry) => (
+                              <div key={entry.id} className="flex items-center justify-between text-sm">
+                                <span className="text-white/70">
+                                  {new Date(entry.logged_at || entry.created_at || "").toLocaleDateString()}
+                                </span>
                                 <div className="flex items-center">
                                   <span className="text-white font-medium">
-                                    {entry.weight} {unit}
+                                    {Number(entry.weight).toFixed(1)} {unit}
                                   </span>
-                                  {entry.change && (
+                                  {entry.change !== null && entry.change !== undefined && (
                                     <span
                                       className={`ml-2 text-xs ${entry.change > 0 ? "text-red-400" : "text-green-400"}`}
                                     >
                                       ({entry.change > 0 ? "+" : ""}
-                                      {entry.change.toFixed(1)})
+                                      {Number(entry.change).toFixed(1)})
                                     </span>
                                   )}
                                 </div>
@@ -228,17 +258,17 @@ export function UpdateWeightModal({ isOpen, onClose, currentWeight, onUpdate, re
               </div>
 
               <div className="border-t border-accent/20 p-4 flex gap-3 flex-shrink-0">
-                <ButtonGlow variant="outline-glow" onClick={onClose} className="flex-1">
+                <ButtonGlow variant="outline-glow" onClick={onClose} className="flex-1" disabled={isPending}>
                   Cancel
                 </ButtonGlow>
                 <ButtonGlow
                   variant="accent-glow"
                   onClick={handleUpdate}
-                  disabled={!weight || Number.parseFloat(weight) <= 0}
+                  disabled={!weight || Number.parseFloat(weight) <= 0 || isPending}
                   className="flex-1"
                 >
                   <Scale className="mr-2 h-4 w-4" />
-                  Update Weight
+                  {isPending ? "Saving..." : "Update Weight"}
                 </ButtonGlow>
               </div>
             </Card>

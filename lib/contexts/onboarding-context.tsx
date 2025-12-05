@@ -25,9 +25,6 @@ const defaultData: OnboardingData = {
 
   // Goals data
   primaryGoal: "",
-  progressPhotoUrl: null,
-  transformationPreset: null,
-  transformedPhotoUrl: null,
 
   // Preferences data
   allergies: [],

@@ -22,52 +22,61 @@
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
 
-    --accent: 51 100% 50%;
+    --accent: 45 100% 51%;
     --accent-foreground: 0 0% 9%;
+    
+    /* New accent variations */
+    --accent-warm: 28 100% 54%;
+    --accent-hot: 15 100% 55%;
+    --accent-cool: 180 70% 45%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 51 100% 50%;
+    --ring: 45 100% 51%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
   }
 
   .dark {
-    --background: 0 0% 0%;
+    --background: 240 10% 4%;
     --foreground: 0 0% 98%;
 
-    --card: 0 0% 3.9%;
+    --card: 240 6% 8%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 3.9%;
+    --popover: 240 6% 8%;
     --popover-foreground: 0 0% 98%;
 
     --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
+    --primary-foreground: 240 10% 4%;
 
-    --secondary: 0 0% 14.9%;
+    --secondary: 240 5% 15%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 240 5% 18%;
+    --muted-foreground: 240 5% 65%;
 
-    --accent: 51 100% 50%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 45 100% 51%;
+    --accent-foreground: 240 10% 4%;
+    
+    /* New accent variations for dark mode */
+    --accent-warm: 28 100% 54%;
+    --accent-hot: 15 100% 55%;
+    --accent-cool: 175 70% 42%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 51 100% 50%;
+    --border: 240 5% 18%;
+    --input: 240 5% 18%;
+    --ring: 45 100% 51%;
   }
 }
 
 @layer base {
-  /* Replaced all @apply directives with direct CSS properties for Tailwind v4 compatibility */
   * {
     border-color: hsl(var(--border));
   }
@@ -82,21 +91,132 @@
   h5,
   h6 {
     font-weight: 700;
-    font-family: "Poppins", var(--font-inter), sans-serif;
+    font-family: var(--font-outfit), "Outfit", sans-serif;
+    letter-spacing: -0.025em;
   }
 }
 
 @layer components {
   .glow {
-    box-shadow: 0 0 15px hsl(var(--accent));
+    box-shadow: 0 0 20px hsl(var(--accent) / 0.5), 0 0 40px hsl(var(--accent) / 0.2);
   }
 
   .text-glow {
-    text-shadow: 0 0 10px hsl(var(--accent));
+    text-shadow: 0 0 20px hsl(var(--accent) / 0.6), 0 0 40px hsl(var(--accent) / 0.3);
   }
 
   .border-glow {
-    box-shadow: 0 0 10px hsl(var(--accent));
+    box-shadow: 0 0 15px hsl(var(--accent) / 0.4), inset 0 0 15px hsl(var(--accent) / 0.1);
     border-color: hsl(var(--accent));
+  }
+  
+  /* Premium glass card effect */
+  .glass-card {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--card) / 0.8) 0%,
+      hsl(var(--card) / 0.4) 100%
+    );
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+  
+  .glass-card-accent {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--accent) / 0.15) 0%,
+      hsl(var(--accent) / 0.05) 100%
+    );
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--accent) / 0.3);
+  }
+  
+  /* Gradient text effect */
+  .gradient-text {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--accent)) 0%,
+      hsl(var(--accent-warm)) 50%,
+      hsl(var(--accent-hot)) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+  }
+  
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: calc(var(--radius) + 1px);
+    background: linear-gradient(
+      135deg,
+      hsl(var(--accent)) 0%,
+      hsl(var(--accent-warm)) 50%,
+      hsl(var(--accent) / 0.3) 100%
+    );
+    z-index: -1;
+  }
+  
+  /* Shimmer effect for loading states */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* Performance optimizations */
+@layer utilities {
+  /* Use GPU-accelerated transforms for animations */
+  .animate-in {
+    will-change: transform, opacity;
+  }
+  
+  /* Optimize backdrop-blur performance */
+  .backdrop-blur-sm,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl {
+    -webkit-backdrop-filter: blur(var(--tw-backdrop-blur));
+    transform: translateZ(0);
+  }
+  
+  /* Noise texture overlay */
+  .noise-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  }
+  
+  /* Reduce motion for users who prefer it */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-in,
+    .animate-pulse,
+    [class*="transition-"] {
+      animation: none !important;
+      transition: none !important;
+    }
   }
 }

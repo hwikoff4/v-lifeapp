@@ -34,11 +34,11 @@ export function RateAppModal({ isOpen, onClose }: RateAppModalProps) {
     setSubmitting(true)
 
     try {
-      // In a real app, you would send this to your backend
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Simulate API call
-      console.log("Rating submitted:", { rating, feedback })
+      const { submitAppRating } = await import("@/lib/actions/ratings")
+      const result = await submitAppRating(rating, feedback)
+      if (!result.success) {
+        throw new Error(result.error || "Unable to submit rating")
+      }
 
       setSubmitted(true)
 
@@ -49,7 +49,7 @@ export function RateAppModal({ isOpen, onClose }: RateAppModalProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to submit rating. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to submit rating. Please try again.",
         variant: "destructive",
       })
     } finally {

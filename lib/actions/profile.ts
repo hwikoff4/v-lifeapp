@@ -1,37 +1,37 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
+import { createClient, getAuthUser, createServiceClient } from "@/lib/supabase/server"
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache"
 import { retryWithBackoff, isNetworkError } from "@/lib/utils/retry"
 import type { Profile, ProfileResult } from "@/lib/types"
 
+// Cached profile fetch - revalidates every 60 seconds or on-demand
+const getCachedProfile = unstable_cache(
+  async (userId: string) => {
+    const supabase = createServiceClient()
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle()
+
+    if (error) throw error
+    return profile as Profile | null
+  },
+  ["profile"],
+  { revalidate: 60, tags: ["profile"] }
+)
+
 export async function getProfile(): Promise<ProfileResult> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { profile: null, error: "Not authenticated" }
   }
 
   try {
-    const result = await retryWithBackoff(
-      async () => {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle()
-
-        if (error) throw error
-        return profile as Profile | null
-      },
-      { maxAttempts: 3, initialDelay: 1000 }
-    )
-
-    return { profile: result || null }
+    const profile = await getCachedProfile(user.id)
+    return { profile: profile || null }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to load profile"
     
@@ -60,15 +60,13 @@ export async function updateProfile(profileData: {
   customRestrictions?: string[]
   timezone?: string
 }): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   // Validation
   const validationErrors: string[] = []
@@ -81,7 +79,7 @@ export async function updateProfile(profileData: {
     validationErrors.push("Invalid gym access value")
   }
 
-  if (profileData.primaryGoal && !["lose_weight", "build_muscle", "maintain", "improve_health"].includes(profileData.primaryGoal)) {
+  if (profileData.primaryGoal && !["lose-weight", "tone-up", "build-muscle", "lifestyle"].includes(profileData.primaryGoal)) {
     validationErrors.push("Invalid primary goal value")
   }
 
@@ -120,6 +118,7 @@ export async function updateProfile(profileData: {
       { maxAttempts: 3 }
     )
 
+    revalidateTag("profile")
     revalidatePath("/settings")
     revalidatePath("/dashboard")
 
@@ -140,32 +139,16 @@ export async function updateProfile(profileData: {
 }
 
 export async function checkOnboardingStatus(): Promise<{ onboardingCompleted?: boolean; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
 
   try {
-    const result = await retryWithBackoff(
-      async () => {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("onboarding_completed")
-          .eq("id", user.id)
-          .maybeSingle()
-
-        if (error) throw error
-        return profile
-      },
-      { maxAttempts: 2 }
-    )
-
-    return { onboardingCompleted: result?.onboarding_completed || false }
+    // Use cached profile to check onboarding status
+    const profile = await getCachedProfile(user.id)
+    return { onboardingCompleted: profile?.onboarding_completed || false }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to check onboarding status"
     return { error: errorMessage }

@@ -1,40 +1,46 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useRef } from "react"
+import { useState, useRef, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Camera, Upload, Trash2, Eye } from "lucide-react"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
-interface ProgressPhoto {
+interface ProgressPhotoPreview {
   id: string
   date: string
-  weight?: number
-  note?: string
+  weight?: number | null
+  note?: string | null
   imageUrl: string
-  type: "front" | "side" | "back" | "custom"
+  type: string
 }
 
 interface ProgressPhotoModalProps {
   isOpen: boolean
   onClose: () => void
-  onAdd: (photo: Omit<ProgressPhoto, "id">) => void
-  recentPhotos: ProgressPhoto[]
-  currentWeight?: number
+  onSuccess?: () => void
+  recentPhotos: ProgressPhotoPreview[]
+  currentWeight?: number | null
 }
 
-export function ProgressPhotoModal({ isOpen, onClose, onAdd, recentPhotos, currentWeight }: ProgressPhotoModalProps) {
+export function ProgressPhotoModal({ isOpen, onClose, onSuccess, recentPhotos, currentWeight }: ProgressPhotoModalProps) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const supabase = createClient()
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [photoType, setPhotoType] = useState<"front" | "side" | "back" | "custom">("front")
   const [weight, setWeight] = useState(currentWeight?.toString() || "")
   const [note, setNote] = useState("")
   const [previewMode, setPreviewMode] = useState(false)
-  const [selectedPhotoForPreview, setSelectedPhotoForPreview] = useState<ProgressPhoto | null>(null)
+  const [selectedPhotoForPreview, setSelectedPhotoForPreview] = useState<ProgressPhotoPreview | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isPending, startTransition] = useTransition()
 
   const photoTypes = [
     { id: "front", name: "Front View", description: "Face forward, arms at sides" },
@@ -48,30 +54,76 @@ export function ProgressPhotoModal({ isOpen, onClose, onAdd, recentPhotos, curre
     if (file) {
       const imageUrl = URL.createObjectURL(file)
       setSelectedImage(imageUrl)
+      setSelectedFile(file)
     }
   }
 
   const handleAdd = () => {
-    if (selectedImage) {
-      const today = new Date().toISOString().split("T")[0]
-      onAdd({
-        date: today,
-        weight: weight ? Number.parseFloat(weight) : undefined,
-        note: note.trim() || undefined,
-        imageUrl: selectedImage,
-        type: photoType,
+    if (!selectedFile) {
+      toast({
+        title: "Add a photo",
+        description: "Please upload or capture a progress photo.",
+        variant: "destructive",
       })
-
-      // Reset form
-      setSelectedImage(null)
-      setWeight(currentWeight?.toString() || "")
-      setNote("")
-      setPhotoType("front")
-      onClose()
+      return
     }
+
+    startTransition(async () => {
+      try {
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser()
+        if (error || !user) {
+          throw new Error("You must be logged in.")
+        }
+
+        const fileExt = selectedFile.name.split(".").pop()
+        const path = `${user.id}/${crypto.randomUUID()}.${fileExt}`
+        const upload = await supabase.storage.from("progress-photos").upload(path, selectedFile, {
+          cacheControl: "3600",
+          upsert: false,
+        })
+
+        if (upload.error) {
+          throw upload.error
+        }
+
+        const { createProgressPhoto } = await import("@/lib/actions/progress")
+        const result = await createProgressPhoto({
+          imageUrl: path,
+          weight: weight ? Number.parseFloat(weight) : undefined,
+          note: note.trim() || undefined,
+          photoType,
+        })
+
+        if (!result.success) {
+          throw new Error(result.error || "Unable to save progress photo")
+        }
+
+        toast({
+          title: "Photo saved",
+          description: "Your transformation timeline is up to date.",
+        })
+        setSelectedFile(null)
+        setSelectedImage(null)
+        setNote("")
+        setPhotoType("front")
+        onSuccess?.()
+        router.refresh()
+        onClose()
+      } catch (error) {
+        console.error("[Progress] Failed to save photo:", error)
+        toast({
+          title: "Unable to save photo",
+          description: error instanceof Error ? error.message : "Please try again.",
+          variant: "destructive",
+        })
+      }
+    })
   }
 
-  const openPreview = (photo: ProgressPhoto) => {
+  const openPreview = (photo: ProgressPhotoPreview) => {
     setSelectedPhotoForPreview(photo)
     setPreviewMode(true)
   }
@@ -308,8 +360,10 @@ export function ProgressPhotoModal({ isOpen, onClose, onAdd, recentPhotos, curre
                             </div>
                             <div className="absolute bottom-1 left-1 right-1">
                               <div className="bg-black/70 rounded px-2 py-1">
-                                <p className="text-xs text-white font-medium">{photo.type}</p>
-                                <p className="text-xs text-white/70">{photo.date}</p>
+                                <p className="text-xs text-white font-medium capitalize">{photo.type}</p>
+                                <p className="text-xs text-white/70">
+                                  {new Date(photo.date).toLocaleDateString()}
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -320,12 +374,12 @@ export function ProgressPhotoModal({ isOpen, onClose, onAdd, recentPhotos, curre
               </div>
 
               <div className="border-t border-accent/20 p-4 flex gap-3 flex-shrink-0">
-                <ButtonGlow variant="outline-glow" onClick={onClose} className="flex-1">
+                <ButtonGlow variant="outline-glow" onClick={onClose} className="flex-1" disabled={isPending}>
                   Cancel
                 </ButtonGlow>
-                <ButtonGlow variant="accent-glow" onClick={handleAdd} disabled={!selectedImage} className="flex-1">
+                <ButtonGlow variant="accent-glow" onClick={handleAdd} disabled={!selectedImage || isPending} className="flex-1">
                   <Camera className="mr-2 h-4 w-4" />
-                  Save Photo
+                  {isPending ? "Saving..." : "Save Photo"}
                 </ButtonGlow>
               </div>
             </Card>

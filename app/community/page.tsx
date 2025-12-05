@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, lazy, Suspense, memo } from "react"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
 import {
   Heart,
   MessageCircle,
@@ -30,12 +29,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CreatePostModal } from "@/app/create-post-modal"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { getRandomAvatar, DEFAULT_AVATAR } from "@/lib/stock-images"
+
+// Lazy load modal
+const CreatePostModal = lazy(() => import("@/app/create-post-modal").then(m => ({ default: m.CreatePostModal })))
 
 interface Comment {
   id: number
@@ -198,7 +200,7 @@ export default function Community() {
 
   const currentUser = {
     name: currentUserName,
-    avatar: "/placeholder.svg?height=40&width=40",
+    avatar: DEFAULT_AVATAR,
   }
 
   const categories = [
@@ -335,12 +337,7 @@ export default function Community() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20">
       <div className="container max-w-md px-4 py-6">
-        <motion.div
-          className="mb-6 space-y-4"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
+        <div className="mb-6 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-white">Community</h1>
@@ -413,26 +410,16 @@ export default function Community() {
               Trending
             </ButtonGlow>
           </div>
-        </motion.div>
+        </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
           </div>
         ) : (
-          <motion.div
-            className="space-y-6"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.1 }}
-          >
-            {filteredAndSortedPosts.map((post, index) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-              >
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-75">
+            {filteredAndSortedPosts.map((post) => (
+              <div key={post.id}>
                 <Card className="overflow-hidden border-white/10 bg-black/50 backdrop-blur-sm">
                   <CardContent className="p-0">
                     <div className="flex items-center justify-between p-4">
@@ -528,18 +515,13 @@ export default function Community() {
                     </div>
                   </CardContent>
                 </Card>
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
         )}
 
         {!isLoading && filteredAndSortedPosts.length === 0 && (
-          <motion.div
-            className="text-center py-12"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-          >
+          <div className="text-center py-12 animate-in fade-in duration-300 delay-150">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent/20 mx-auto">
               <Search className="h-8 w-8 text-accent" />
             </div>
@@ -549,7 +531,7 @@ export default function Community() {
               <Plus className="mr-2 h-4 w-4" />
               Create Post
             </ButtonGlow>
-          </motion.div>
+          </div>
         )}
       </div>
 
@@ -688,12 +670,7 @@ export default function Community() {
       </Dialog>
 
       {/* Floating Create Post Button */}
-      <motion.div
-        className="fixed bottom-20 right-4 z-50"
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 20 }}
-      >
+      <div className="fixed bottom-20 right-4 z-50 animate-in zoom-in duration-300 delay-300">
         <ButtonGlow
           variant="accent-glow"
           size="icon"
@@ -702,15 +679,19 @@ export default function Community() {
         >
           <Plus className="h-6 w-6" />
         </ButtonGlow>
-      </motion.div>
+      </div>
 
-      <CreatePostModal
-        isOpen={createPostModalOpen}
-        onClose={() => setCreatePostModalOpen(false)}
-        onCreatePost={handleCreatePost}
-        userName={currentUser.name}
-        userAvatar={currentUser.avatar}
-      />
+      {createPostModalOpen && (
+        <Suspense fallback={null}>
+          <CreatePostModal
+            isOpen={createPostModalOpen}
+            onClose={() => setCreatePostModalOpen(false)}
+            onCreatePost={handleCreatePost}
+            userName={currentUser.name}
+            userAvatar={currentUser.avatar}
+          />
+        </Suspense>
+      )}
 
       <BottomNav />
     </div>

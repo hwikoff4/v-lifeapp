@@ -1,8 +1,15 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
+import { createClient, getAuthUser, createServiceClient } from "@/lib/supabase/server"
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache"
 import type { TransformedPost, TransformedComment } from "@/lib/types"
+import { AVATAR_IMAGES } from "@/lib/stock-images"
+
+// Helper to get a consistent avatar based on user ID
+function getUserAvatar(userId: string): string {
+  const hash = userId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return AVATAR_IMAGES[hash % AVATAR_IMAGES.length]
+}
 
 interface PostReaction {
   id: string
@@ -24,107 +31,136 @@ interface PostWithRelations {
   post_reactions: PostReaction[]
 }
 
+// Cached posts fetch - revalidates every 30 seconds
+const getCachedPosts = unstable_cache(
+  async (category?: string) => {
+    // Use service client (doesn't require cookies) for cached queries
+    const supabase = createServiceClient()
+
+    let query = supabase
+      .from("posts")
+      .select(`
+        *,
+        profiles:user_id (
+          id,
+          name
+        ),
+        post_reactions (
+          id,
+          reaction_type,
+          user_id
+        )
+      `)
+      .order("created_at", { ascending: false })
+      .limit(50) // Limit posts for performance
+
+    if (category && category !== "all") {
+      query = query.eq("category", category)
+    }
+
+    const { data: posts, error } = await query
+
+    if (error) throw error
+    return posts as PostWithRelations[] | null
+  },
+  ["community-posts"],
+  { revalidate: 30, tags: ["community-posts"] }
+)
+
+// Cached follows fetch
+const getCachedFollows = unstable_cache(
+  async (userId: string) => {
+    const supabase = createServiceClient()
+    const { data: follows } = await supabase
+      .from("follows")
+      .select("following_id")
+      .eq("follower_id", userId)
+    return follows?.map((f) => f.following_id) || []
+  },
+  ["user-follows"],
+  { revalidate: 60, tags: ["user-follows"] }
+)
+
 export async function getPosts(
   category?: string, 
   sortBy?: "recent" | "popular" | "trending"
 ): Promise<{ posts?: TransformedPost[]; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
 
-  let query = supabase
-    .from("posts")
-    .select(`
-      *,
-      profiles:user_id (
-        id,
-        name
-      ),
-      post_reactions (
-        id,
-        reaction_type,
-        user_id
-      )
-    `)
-    .order("created_at", { ascending: false })
+  try {
+    // Fetch posts and follows in parallel
+    const [posts, followingIds] = await Promise.all([
+      getCachedPosts(category),
+      getCachedFollows(user.id)
+    ])
 
-  if (category && category !== "all") {
-    query = query.eq("category", category)
-  }
-
-  const { data: posts, error } = await query
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  // Get follows for current user
-  const { data: follows } = await supabase
-    .from("follows")
-    .select("following_id")
-    .eq("follower_id", user.id)
-
-  const followingIds = new Set(follows?.map((f) => f.following_id) || [])
-
-  // Transform posts
-  const transformedPosts: TransformedPost[] = (posts as PostWithRelations[] || []).map((post) => {
-    const reactions = {
-      heart: 0,
-      celebrate: 0,
-      support: 0,
-      fire: 0,
+    if (!posts) {
+      return { posts: [] }
     }
 
-    let userReaction: 'heart' | 'celebrate' | 'support' | 'fire' | null = null
+    const followingSet = new Set(followingIds)
 
-    post.post_reactions?.forEach((reaction) => {
-      const type = reaction.reaction_type
-      if (reactions[type] !== undefined) {
-        reactions[type]++
+    // Transform posts
+    const transformedPosts: TransformedPost[] = posts.map((post) => {
+      const reactions = {
+        heart: 0,
+        celebrate: 0,
+        support: 0,
+        fire: 0,
       }
-      if (reaction.user_id === user.id) {
-        userReaction = type
+
+      let userReaction: 'heart' | 'celebrate' | 'support' | 'fire' | null = null
+
+      post.post_reactions?.forEach((reaction) => {
+        const type = reaction.reaction_type
+        if (reactions[type] !== undefined) {
+          reactions[type]++
+        }
+        if (reaction.user_id === user.id) {
+          userReaction = type
+        }
+      })
+
+      return {
+        id: post.id,
+        user: {
+          id: post.user_id,
+          name: post.profiles?.name || "Unknown User",
+          avatar: getUserAvatar(post.user_id),
+          isFollowing: followingSet.has(post.user_id),
+        },
+        title: post.title,
+        content: post.content,
+        image: post.image_url,
+        likes: post.likes_count || 0,
+        comments: post.comments_count || 0,
+        time: getTimeAgo(new Date(post.created_at)),
+        category: post.category,
+        reactions,
+        userReaction,
       }
     })
 
-    return {
-      id: post.id,
-      user: {
-        id: post.user_id,
-        name: post.profiles?.name || "Unknown User",
-        avatar: `/placeholder.svg?height=40&width=40`,
-        isFollowing: followingIds.has(post.user_id),
-      },
-      title: post.title,
-      content: post.content,
-      image: post.image_url,
-      likes: post.likes_count || 0,
-      comments: post.comments_count || 0,
-      time: getTimeAgo(new Date(post.created_at)),
-      category: post.category,
-      reactions,
-      userReaction,
+    // Sort posts based on sortBy parameter
+    if (sortBy === "popular") {
+      transformedPosts.sort((a, b) => b.likes - a.likes)
+    } else if (sortBy === "trending") {
+      transformedPosts.sort((a, b) => {
+        const aTotal = Object.values(a.reactions).reduce((sum, val) => sum + val, 0)
+        const bTotal = Object.values(b.reactions).reduce((sum, val) => sum + val, 0)
+        return bTotal - aTotal
+      })
     }
-  })
 
-  // Sort posts based on sortBy parameter
-  if (sortBy === "popular") {
-    transformedPosts.sort((a, b) => b.likes - a.likes)
-  } else if (sortBy === "trending") {
-    transformedPosts.sort((a, b) => {
-      const aTotal = Object.values(a.reactions).reduce((sum, val) => sum + val, 0)
-      const bTotal = Object.values(b.reactions).reduce((sum, val) => sum + val, 0)
-      return bTotal - aTotal
-    })
+    return { posts: transformedPosts }
+  } catch (error) {
+    console.error("Error fetching posts:", error)
+    return { error: "Failed to load posts" }
   }
-
-  return { posts: transformedPosts }
 }
 
 export async function createPost(data: { 
@@ -133,16 +169,13 @@ export async function createPost(data: {
   image?: string
   category: string 
 }): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
 
+  const supabase = await createClient()
   const { error } = await supabase.from("posts").insert({
     user_id: user.id,
     title: data.title,
@@ -157,7 +190,7 @@ export async function createPost(data: {
     return { error: error.message }
   }
 
-  revalidatePath("/community")
+  revalidateTag("community-posts")
   return { success: true }
 }
 
@@ -165,15 +198,13 @@ export async function toggleReaction(
   postId: string, 
   reactionType: "heart" | "celebrate" | "support" | "fire"
 ): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   // Check if user already reacted to this post
   const { data: existingReaction } = await supabase
@@ -212,20 +243,18 @@ export async function toggleReaction(
     if (error) return { error: error.message }
   }
 
-  revalidatePath("/community")
+  // Don't revalidate immediately - let optimistic updates handle it
   return { success: true }
 }
 
 export async function toggleFollow(userId: string): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   // Check if already following
   const { data: existingFollow } = await supabase
@@ -253,7 +282,7 @@ export async function toggleFollow(userId: string): Promise<{ success?: boolean;
     if (error) return { error: error.message }
   }
 
-  revalidatePath("/community")
+  revalidateTag("user-follows")
   return { success: true }
 }
 
@@ -271,6 +300,7 @@ export async function getComments(postId: string): Promise<{ comments?: Transfor
     `)
     .eq("post_id", postId)
     .order("created_at", { ascending: true })
+    .limit(50) // Limit comments for performance
 
   if (error) {
     return { error: error.message }
@@ -280,7 +310,7 @@ export async function getComments(postId: string): Promise<{ comments?: Transfor
     id: comment.id,
     user: {
       name: comment.profiles?.name || "Unknown User",
-      avatar: `/placeholder.svg?height=40&width=40`,
+      avatar: getUserAvatar(comment.user_id),
     },
     content: comment.content,
     time: getTimeAgo(new Date(comment.created_at)),
@@ -294,16 +324,13 @@ export async function createComment(
   postId: string, 
   content: string
 ): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
+  const { user, error: authError } = await getAuthUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated" }
   }
 
+  const supabase = await createClient()
   const { error } = await supabase.from("comments").insert({
     post_id: postId,
     user_id: user.id,
@@ -323,7 +350,6 @@ export async function createComment(
     console.warn("Failed to increment comments count:", updateError.message)
   }
 
-  revalidatePath("/community")
   return { success: true }
 }
 
@@ -364,7 +390,7 @@ export async function getLeaderboard(): Promise<{ leaderboard?: LeaderboardUser[
   const leaderboard: LeaderboardUser[] = (users as UserWithCounts[] || [])
     .map((user) => ({
       name: user.name || "Unknown User",
-      avatar: `/placeholder.svg?height=40&width=40`,
+      avatar: getUserAvatar(user.id),
       posts: user.posts?.[0]?.count || 0,
       likes: user.post_reactions?.reduce(
         (sum, post) => sum + (post.post_reactions?.[0]?.count || 0),

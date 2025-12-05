@@ -2,31 +2,259 @@
 
 import type React from "react"
 
-import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
-import { motion } from "framer-motion"
-import { Send, Loader2, Bot, UserIcon } from "lucide-react"
-import { useState, useRef, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Send, Loader2, Bot, UserIcon, Plus, MessageSquare, ChevronLeft, Trash2, Sparkles } from "lucide-react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { cn } from "@/lib/utils"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+
+interface Message {
+  id: string
+  role: "user" | "assistant"
+  content: string
+}
+
+interface Conversation {
+  id: string
+  title: string
+  updated_at: string
+  message_count: number
+}
 
 export default function VBotPage() {
   const [input, setInput] = useState("")
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+  const [loadingConversations, setLoadingConversations] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const conversationIdRef = useRef<string | null>(null)
+
+  // Load conversations on mount
+  useEffect(() => {
+    loadConversations()
+  }, [])
+
+  const loadConversations = async () => {
+    setLoadingConversations(true)
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase
+        .from('chat_conversations')
+        .select('id, title, updated_at, message_count')
+        .order('updated_at', { ascending: false })
+        .limit(20)
+      
+      if (error) {
+        console.error("Error loading conversations:", error)
+      } else {
+        setConversations(data || [])
+      }
+    } catch (err) {
+      console.error("Error loading conversations:", err)
+    } finally {
+      setLoadingConversations(false)
+    }
+  }
+
+  const loadConversation = async (convId: string) => {
+    setIsLoading(true)
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('id, role, content, created_at')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true })
+      
+      if (error) {
+        console.error("Error loading messages:", error)
+        setError("Failed to load conversation")
+      } else {
+        setMessages((data || []).map(m => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })))
+        conversationIdRef.current = convId
+        setConversationId(convId)
+        setShowHistory(false)
+      }
+    } catch (err) {
+      console.error("Error loading conversation:", err)
+      setError("Failed to load conversation")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const deleteConversation = async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await supabase.from('chat_conversations').delete().eq('id', convId)
+      setConversations(prev => prev.filter(c => c.id !== convId))
+      if (conversationId === convId) {
+        startNewConversation()
+      }
+    } catch (err) {
+      console.error("Error deleting conversation:", err)
+    }
+  }
+
+  const startNewConversation = () => {
+    conversationIdRef.current = null
+    setConversationId(null)
+    setMessages([])
+    setError(null)
+    setShowHistory(false)
+  }
 
   useEffect(() => {
-    console.log("[v0] VBot page mounted")
     return () => {
-      console.log("[v0] VBot page unmounting")
+      abortControllerRef.current?.abort()
     }
   }, [])
 
-  const { messages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/vbot" }),
-  })
+  const sendMessage = useCallback(async (userMessage: string) => {
+    if (!userMessage.trim() || isLoading) return
+
+    const supabase = getSupabaseBrowserClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      setError("Please log in to use the chat")
+      return
+    }
+
+    // Add user message
+    const userMsg: Message = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: userMessage.trim(),
+    }
+    
+    setMessages(prev => [...prev, userMsg])
+    setInput("")
+    setIsLoading(true)
+    setError(null)
+
+    abortControllerRef.current = new AbortController()
+
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      
+      // Use ref to get the latest conversationId (avoids stale closure)
+      const currentConversationId = conversationIdRef.current
+      
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/vbot`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            messages: [...messages, userMsg].map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
+            conversationId: currentConversationId,
+          }),
+          signal: abortControllerRef.current.signal,
+        }
+      )
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Error: ${response.status} - ${errorText}`)
+      }
+
+      // Get conversation ID from response header
+      const newConversationId = response.headers.get("X-Conversation-Id")
+      if (newConversationId) {
+        // Update ref immediately (for next sendMessage call)
+        conversationIdRef.current = newConversationId
+        // Then update state (for UI)
+        if (!currentConversationId) {
+          setConversationId(newConversationId)
+        }
+      }
+
+      // Create assistant message placeholder
+      const assistantMsgId = `assistant-${Date.now()}`
+      setMessages(prev => [...prev, {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+      }])
+
+      // Read streaming response
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error("No response body")
+
+      const decoder = new TextDecoder()
+      let assistantContent = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split("\n")
+
+        for (const line of lines) {
+          if (line.startsWith("0:")) {
+            try {
+              const text = JSON.parse(line.slice(2))
+              assistantContent += text
+              setMessages(prev => 
+                prev.map(m => 
+                  m.id === assistantMsgId 
+                    ? { ...m, content: assistantContent }
+                    : m
+                )
+              )
+            } catch {
+              // Ignore parse errors
+            }
+          } else if (line.startsWith("d:")) {
+            // Handle done message with conversation ID
+            try {
+              const data = JSON.parse(line.slice(2))
+              if (data.conversationId) {
+                conversationIdRef.current = data.conversationId
+                setConversationId(data.conversationId)
+              }
+            } catch {
+              // Ignore
+            }
+          }
+        }
+      }
+
+      // Refresh conversations list
+      loadConversations()
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return
+      }
+      console.error("[VBot Error]", err)
+      setError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setIsLoading(false)
+      abortControllerRef.current = null
+    }
+  }, [messages, isLoading, conversationId])
 
   useEffect(() => {
     if (error) {
@@ -42,84 +270,225 @@ export default function VBotPage() {
     scrollToBottom()
   }, [messages])
 
-  const isLoading = status === "streaming" || status === "submitted"
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
-
-    console.log("[v0] Sending message:", input)
-    sendMessage({ text: input })
-    setInput("")
+    sendMessage(input)
   }
 
-  console.log("[v0] VBot render - messages count:", messages.length, "status:", status)
+  // History sidebar
+  const HistorySidebar = () => (
+    <motion.div
+      initial={{ x: "-100%" }}
+      animate={{ x: 0 }}
+      exit={{ x: "-100%" }}
+      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+      className="fixed inset-0 z-50 bg-black"
+    >
+      <div className="flex h-full flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowHistory(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10"
+            >
+              <ChevronLeft className="h-5 w-5 text-white" />
+            </button>
+            <h2 className="text-lg font-bold text-white">Chat History</h2>
+          </div>
+          <ButtonGlow
+            variant="accent-glow"
+            size="sm"
+            onClick={startNewConversation}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            New
+          </ButtonGlow>
+        </div>
+
+        {/* Conversations list */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loadingConversations ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-accent" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="py-8 text-center text-white/60">
+              <MessageSquare className="mx-auto mb-2 h-8 w-8" />
+              <p>No conversations yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {conversations.map((conv) => (
+                <motion.div
+                  key={conv.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    "group flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10",
+                    conversationId === conv.id && "border-accent bg-accent/10"
+                  )}
+                  onClick={() => loadConversation(conv.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium text-white">
+                      {conv.title}
+                    </p>
+                    <p className="text-xs text-white/50">
+                      {conv.message_count} messages · {new Date(conv.updated_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => deleteConversation(conv.id, e)}
+                    className="ml-2 opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-400 hover:text-red-300" />
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  )
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-black to-charcoal pb-20">
+    <div className="relative flex min-h-screen flex-col bg-gradient-to-b from-black via-zinc-900 to-black pb-52 noise-overlay">
+      {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-[25%] -top-[25%] h-[50%] w-[50%] rounded-full bg-accent/5 blur-[120px]" />
+        <div className="absolute -bottom-[25%] -right-[25%] h-[50%] w-[50%] rounded-full bg-accent/5 blur-[120px]" />
+      </div>
+
+      {/* History sidebar */}
+      <AnimatePresence>
+        {showHistory && <HistorySidebar />}
+      </AnimatePresence>
+
       {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-white/10 bg-black/90 backdrop-blur-lg">
+      <div className="sticky top-0 z-10 border-b border-white/5 bg-black/60 backdrop-blur-xl">
         <div className="container mx-auto max-w-md px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent">
-              <Bot className="h-6 w-6 text-black" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowHistory(true)}
+                className="group flex h-10 w-10 items-center justify-center rounded-full bg-white/5 transition-all hover:bg-white/10 hover:scale-105"
+              >
+                <MessageSquare className="h-5 w-5 text-white/70 transition-colors group-hover:text-white" />
+              </button>
+              <div>
+                <h1 className="text-lg font-bold text-white flex items-center gap-2">
+                  VBot <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">BETA</span>
+                </h1>
+                <p className="text-xs text-white/50">
+                  {conversationId ? "Continuing conversation" : "Your AI Fitness Coach"}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">VBot</h1>
-              <p className="text-xs text-white/60">Your AI Fitness Coach</p>
-            </div>
+            <ButtonGlow
+              variant="outline-glow"
+              size="sm"
+              onClick={startNewConversation}
+              className="h-8 border-white/10 bg-white/5 hover:bg-white/10"
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              New Chat
+            </ButtonGlow>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="container mx-auto max-w-md flex-1 overflow-y-auto px-4 py-6">
+      <div className="relative z-0 container mx-auto max-w-md flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
           <motion.div
             className="flex h-full flex-col items-center justify-center text-center"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-accent/20">
-              <Bot className="h-10 w-10 text-accent" />
-            </div>
-            <h2 className="mb-2 text-xl font-bold text-white">Hi! I'm VBot</h2>
-            <p className="mb-6 max-w-sm text-white/70">
-              I know everything about your fitness journey. Ask me about your workouts, nutrition, habits, progress, or
-              get personalized advice!
+            <motion.div
+              className="relative mb-8 flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/20 backdrop-blur-sm"
+              animate={{
+                boxShadow: [
+                  "0 0 20px -5px rgba(234, 179, 8, 0.1)",
+                  "0 0 50px -10px rgba(234, 179, 8, 0.3)",
+                  "0 0 20px -5px rgba(234, 179, 8, 0.1)",
+                ],
+              }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <motion.div
+                animate={{ rotate: [0, 5, -5, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <Bot className="h-14 w-14 text-accent drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]" />
+              </motion.div>
+              <motion.div
+                className="absolute -right-2 -top-2 rounded-full bg-black/80 p-2 shadow-lg ring-1 ring-white/10 backdrop-blur-md"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <Sparkles className="h-4 w-4 text-accent" />
+              </motion.div>
+            </motion.div>
+
+            <h2 className="mb-3 text-3xl font-bold tracking-tight">
+              <span className="text-white">Hi! I'm </span>
+              <span className="bg-gradient-to-r from-accent via-yellow-400 to-orange-400 bg-clip-text text-transparent">VBot</span>
+            </h2>
+            <p className="mb-8 max-w-sm text-lg text-white/60 leading-relaxed">
+              I know everything about your fitness journey. What would you like to work on today?
             </p>
-            <div className="space-y-2">
-              <Card
-                className="cursor-pointer border-white/10 bg-black/50 backdrop-blur-sm transition-all hover:scale-[1.02]"
-                onClick={() => {
-                  setInput("How am I doing with my fitness goals?")
-                }}
-              >
-                <CardContent className="p-3">
-                  <p className="text-sm text-white/80">How am I doing with my fitness goals?</p>
-                </CardContent>
-              </Card>
-              <Card
-                className="cursor-pointer border-white/10 bg-black/50 backdrop-blur-sm transition-all hover:scale-[1.02]"
-                onClick={() => {
-                  setInput("What should I focus on this week?")
-                }}
-              >
-                <CardContent className="p-3">
-                  <p className="text-sm text-white/80">What should I focus on this week?</p>
-                </CardContent>
-              </Card>
-              <Card
-                className="cursor-pointer border-white/10 bg-black/50 backdrop-blur-sm transition-all hover:scale-[1.02]"
-                onClick={() => {
-                  setInput("Give me motivation based on my progress")
-                }}
-              >
-                <CardContent className="p-3">
-                  <p className="text-sm text-white/80">Give me motivation based on my progress</p>
-                </CardContent>
-              </Card>
+
+            <div className="w-full max-w-sm space-y-3">
+              {[
+                "How am I doing with my fitness goals?",
+                "What should I focus on this week?",
+                "Give me motivation based on my progress"
+              ].map((text, i) => (
+                <motion.button
+                  key={i}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 + 0.2 }}
+                  className="group relative flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-left text-sm text-white/80 transition-all hover:border-accent/30 hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                  onClick={() => setInput(text)}
+                >
+                  <span>{text}</span>
+                  <ChevronLeft className="h-4 w-4 rotate-180 opacity-0 transition-all text-accent group-hover:translate-x-1 group-hover:opacity-100" />
+                </motion.button>
+              ))}
             </div>
+            
+            {/* Show recent conversations */}
+            {conversations.length > 0 && (
+              <div className="mt-12 w-full max-w-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-xs font-medium text-white/40 uppercase tracking-wider">Recent</span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+                <div className="space-y-2">
+                  {conversations.slice(0, 2).map((conv, i) => (
+                    <motion.div
+                      key={conv.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.5 + (i * 0.1) }}
+                      className="group cursor-pointer rounded-lg border border-white/5 bg-white/[0.02] p-3 text-left transition-colors hover:bg-white/5 hover:border-white/10"
+                      onClick={() => loadConversation(conv.id)}
+                    >
+                      <p className="truncate text-sm text-white/70 group-hover:text-white transition-colors">{conv.title}</p>
+                      <p className="text-xs text-white/30 mt-1">
+                        {new Date(conv.updated_at).toLocaleDateString()}
+                      </p>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         ) : (
           <div className="space-y-4">
@@ -129,7 +498,7 @@ export default function VBotPage() {
                 className={cn("flex gap-3", message.role === "user" ? "justify-end" : "justify-start")}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
+                transition={{ duration: 0.3, delay: index * 0.02 }}
               >
                 {message.role === "assistant" && (
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent">
@@ -144,28 +513,22 @@ export default function VBotPage() {
                       : "border border-white/10 bg-black/50 text-white backdrop-blur-sm",
                   )}
                 >
-                  {message.parts.map((part, partIndex) => {
-                    if (part.type === "text") {
-                      if (message.role === "assistant") {
-                        return (
-                          <div 
-                            key={partIndex}
-                            className="prose prose-invert prose-sm max-w-none leading-relaxed [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-2 [&_p]:last:mb-0 [&_strong]:font-bold [&_strong]:text-white [&_ul]:list-disc [&_ul]:pl-4"
-                          >
-                            <ReactMarkdown>
-                              {part.text}
-                            </ReactMarkdown>
-                          </div>
-                        )
-                      }
-                      return (
-                        <p key={partIndex} className="whitespace-pre-wrap text-sm leading-relaxed">
-                          {part.text}
-                        </p>
-                      )
-                    }
-                    return null
-                  })}
+                  {message.role === "assistant" ? (
+                    <div className="prose prose-invert prose-sm max-w-none leading-relaxed [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-2 [&_p]:last:mb-0 [&_strong]:font-bold [&_strong]:text-white [&_ul]:list-disc [&_ul]:pl-4">
+                      {message.content ? (
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      ) : (
+                        <span className="inline-flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span className="text-white/60">Thinking...</span>
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {message.content}
+                    </p>
+                  )}
                 </div>
                 {message.role === "user" && (
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/10">
@@ -174,7 +537,7 @@ export default function VBotPage() {
                 )}
               </motion.div>
             ))}
-            {isLoading && (
+            {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <motion.div className="flex gap-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent">
                   <Bot className="h-5 w-5 text-black" />
@@ -191,28 +554,28 @@ export default function VBotPage() {
       </div>
 
       {/* Input */}
-      <div className="sticky bottom-16 border-b border-white/10 bg-black/90 backdrop-blur-lg">
+      <div className="sticky bottom-28 z-10 border-t border-white/5 bg-black/60 backdrop-blur-xl">
         <div className="container mx-auto max-w-md px-4 py-4">
-          <form onSubmit={handleSubmit} className="flex gap-2">
+          <form onSubmit={handleSubmit} className="relative flex gap-2">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me anything about your fitness..."
-              className="flex-1 rounded-full border border-white/10 bg-black/50 px-4 py-3 text-sm text-white placeholder:text-white/40 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              placeholder="Ask me anything..."
+              className="flex-1 rounded-full border border-white/10 bg-white/5 px-6 py-3.5 text-sm text-white shadow-inner placeholder:text-white/30 focus:border-accent/50 focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all"
               disabled={isLoading}
             />
             <ButtonGlow
               type="submit"
               variant="accent-glow"
               size="icon"
-              className="h-12 w-12 flex-shrink-0 rounded-full"
+              className="h-12 w-12 flex-shrink-0 rounded-full shadow-lg shadow-accent/20"
               disabled={!input.trim() || isLoading}
             >
               {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             </ButtonGlow>
           </form>
-          {error && <p className="mt-2 text-xs text-red-500">Error: {error.message}</p>}
+          {error && <p className="mt-2 text-xs text-red-500">Error: {error}</p>}
         </div>
       </div>
 

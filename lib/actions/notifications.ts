@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthUser } from "@/lib/supabase/server"
 
 export interface NotificationPreferences {
   notificationsEnabled: boolean
@@ -18,16 +18,13 @@ export interface NotificationPreferences {
 
 export async function getNotificationPreferences() {
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const { user, error: authError } = await getAuthUser()
 
     if (authError || !user) {
       return { error: "Not authenticated", preferences: null }
     }
+
+    const supabase = await createClient()
 
     const { data: profile, error } = await supabase
       .from("profiles")

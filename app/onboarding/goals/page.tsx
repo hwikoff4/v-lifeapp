@@ -1,11 +1,9 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowRight, Upload, Sparkles } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card } from "@/components/ui/card"
 import { useOnboarding } from "@/lib/contexts/onboarding-context"
@@ -18,113 +16,43 @@ const goals = [
   { id: "lifestyle", title: "Lifestyle Maintenance", description: "Stay healthy and active" },
 ]
 
-const transformations = [
-  { id: "lose-weight", title: "Lose Weight" },
-  { id: "tone", title: "Tone & Define" },
-  { id: "build", title: "Build Muscle" },
-  { id: "balanced", title: "Balanced Lifestyle" },
-]
-
 export default function GoalSelection() {
   const router = useRouter()
   const { data, updateData } = useOnboarding()
   const { toast } = useToast()
 
   const [selectedGoal, setSelectedGoal] = useState<string | null>(data.primaryGoal || null)
-  const [photoUploaded, setPhotoUploaded] = useState(!!data.progressPhotoUrl)
-  const [selectedTransformation, setSelectedTransformation] = useState<string | null>(data.transformationPreset)
-  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(data.progressPhotoUrl)
-  const [transformedPhotoUrl, setTransformedPhotoUrl] = useState<string | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-
-  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      const photoUrl = URL.createObjectURL(file)
-      setUploadedPhotoUrl(photoUrl)
-      setPhotoUploaded(true)
-      setTransformedPhotoUrl(null)
-      console.log("[v0] Photo uploaded:", file.name)
-    }
-  }
-
-  const handleSavePreview = async () => {
-    if (!selectedTransformation) {
-      toast({
-        title: "Select a preset",
-        description: "Please choose a transformation preset before saving.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!uploadedPhotoUrl) {
-      toast({
-        title: "Upload a photo",
-        description: "Please upload a photo before transforming.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsProcessing(true)
-    console.log("[v0] Processing AI visualization with preset:", selectedTransformation)
-
-    try {
-      // Call the AI transformation API
-      const response = await fetch("/api/transform-body", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          imageUrl: uploadedPhotoUrl,
-          transformationType: selectedTransformation,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Transformation failed")
-      }
-
-      const result = await response.json()
-
-      // Set the transformed image
-      setTransformedPhotoUrl(result.transformedImageUrl)
-
-      updateData({
-        progressPhotoUrl: uploadedPhotoUrl,
-        transformedPhotoUrl: result.transformedImageUrl,
-        transformationPreset: selectedTransformation,
-      })
-
-      toast({
-        title: "Transformation complete!",
-        description: "Your AI-generated transformation is ready. This is what you could look like!",
-      })
-
-      console.log("[v0] AI visualization saved successfully")
-    } catch (error) {
-      console.error("[v0] Transformation error:", error)
-      toast({
-        title: "Transformation failed",
-        description: "We couldn't process your image. Please try again or choose a different photo.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsProcessing(false)
-    }
-  }
 
   const handleContinue = () => {
+    if (!selectedGoal) {
+      toast({
+        title: "Choose a goal",
+        description: "Select the primary result you want so we can personalize everything else.",
+        variant: "destructive",
+      })
+      return
+    }
+
     updateData({
-      primaryGoal: selectedGoal || "",
-      progressPhotoUrl: uploadedPhotoUrl,
-      transformedPhotoUrl: transformedPhotoUrl,
-      transformationPreset: selectedTransformation,
+      primaryGoal: selectedGoal,
     })
     router.push("/onboarding/preferences")
   }
+
+  const focusAreas = [
+    {
+      title: "Training Focus",
+      description: "We’ll adjust volume, exercise selection, and recovery sessions around this outcome.",
+    },
+    {
+      title: "Nutrition Targets",
+      description: "Daily calories, protein, and macro splits are tailored to match your primary goal.",
+    },
+    {
+      title: "Habit Coaching",
+      description: "We highlight the habits (sleep, hydration, mindfulness) that most impact your objective.",
+    },
+  ]
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-black to-charcoal p-4">
@@ -154,105 +82,24 @@ export default function GoalSelection() {
           </div>
 
           <motion.div
-            className="mt-8 rounded-lg border border-accent border-glow bg-black/50 p-4"
+            className="rounded-lg border border-white/10 bg-black/40 p-4 space-y-4"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.2 }}
           >
-            <h2 className="mb-3 text-xl font-bold text-accent">AI Body Visualization</h2>
-            <p className="mb-4 text-sm text-white/80">
-              Want to see your future self? Upload a photo and let AI show your transformation!
+            <h2 className="text-xl font-bold text-white">What This Choice Unlocks</h2>
+            <p className="text-sm text-white/70">
+              Your primary goal sets the tone for coaching, nutrition targets, and how V-Life celebrates your wins.
             </p>
 
-            {!photoUploaded ? (
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-accent/50 bg-black/30 p-6 transition-all hover:border-accent">
-                <Upload className="mb-2 h-8 w-8 text-accent/70" />
-                <p className="text-sm text-white/70">Drag & drop or click to upload</p>
-                <input type="file" accept="image/*" onChange={handleUpload} className="hidden" />
-              </label>
-            ) : (
-              <div className="space-y-4">
-                <div className={`relative rounded-lg bg-black/50 p-2 ${transformedPhotoUrl ? "h-96" : "h-48"}`}>
-                  {transformedPhotoUrl ? (
-                    <div className="grid grid-cols-2 gap-2 h-full">
-                      <div className="relative">
-                        <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-xs text-white z-10">
-                          Before
-                        </div>
-                        <img
-                          src={uploadedPhotoUrl || "/placeholder.svg?height=200&width=300"}
-                          alt="Before"
-                          className="h-full w-full rounded object-cover"
-                        />
-                      </div>
-                      <div className="relative">
-                        <div className="absolute top-2 left-2 bg-accent/90 px-2 py-1 rounded text-xs text-black font-bold z-10">
-                          After - Your Goal!
-                        </div>
-                        <img
-                          src={transformedPhotoUrl || "/placeholder.svg"}
-                          alt="Transformed"
-                          className="h-full w-full rounded object-cover"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <img
-                        src={uploadedPhotoUrl || "/placeholder.svg?height=200&width=300"}
-                        alt="Your Photo"
-                        className="h-full w-full rounded object-cover"
-                      />
-                    </div>
-                  )}
+            <div className="space-y-3">
+              {focusAreas.map((area) => (
+                <div key={area.title} className="rounded-lg border border-white/10 bg-black/30 p-3">
+                  <p className="text-sm font-semibold text-accent">{area.title}</p>
+                  <p className="text-xs text-white/70 mt-1">{area.description}</p>
                 </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-white">Transformation Presets:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {transformations.map((transform) => (
-                      <button
-                        key={transform.id}
-                        className={`rounded-full px-3 py-1 text-xs transition-all ${
-                          selectedTransformation === transform.id
-                            ? "bg-accent text-black"
-                            : "bg-black/50 text-white/70 border border-accent/30 hover:border-accent/50"
-                        }`}
-                        onClick={() => {
-                          setSelectedTransformation(transform.id)
-                          setTransformedPhotoUrl(null)
-                          console.log("[v0] Transformation preset selected:", transform.id)
-                        }}
-                        disabled={isProcessing}
-                      >
-                        {transform.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <ButtonGlow
-                    variant="outline-glow"
-                    size="sm"
-                    className="flex-1"
-                    onClick={handleSavePreview}
-                    disabled={isProcessing || !selectedTransformation}
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Sparkles className="mr-2 h-3 w-3 animate-spin" />
-                        Transforming with AI...
-                      </>
-                    ) : transformedPhotoUrl ? (
-                      "Regenerate"
-                    ) : (
-                      "Generate Transformation"
-                    )}
-                  </ButtonGlow>
-                </div>
-              </div>
-            )}
+              ))}
+            </div>
           </motion.div>
 
           <ButtonGlow variant="accent-glow" className="w-full" onClick={handleContinue}>

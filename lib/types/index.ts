@@ -12,7 +12,7 @@ export interface Profile {
   height_inches: number | null
   weight: number | null
   goal_weight: number | null
-  primary_goal: 'lose_weight' | 'build_muscle' | 'maintain' | 'improve_health' | null
+  primary_goal: 'lose-weight' | 'tone-up' | 'build-muscle' | 'lifestyle' | null
   activity_level: 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | 'extremely_active' | null
   gym_access: 'yes' | 'no' | 'sometimes' | 'home' | 'hotel' | 'commercial' | 'gym' | 'custom' | 'none' | null
   selected_gym: string | null
@@ -288,6 +288,7 @@ export interface WeightEntry {
   user_id: string
   weight: number
   change: number | null
+  note?: string | null
   logged_at: string
   created_at?: string
 }
@@ -341,9 +342,6 @@ export interface OnboardingData {
 
   // Goals data
   primaryGoal: string
-  progressPhotoUrl: string | null
-  transformationPreset: string | null
-  transformedPhotoUrl?: string | null
 
   // Preferences data
   allergies: string[]

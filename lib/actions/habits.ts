@@ -1,19 +1,13 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthUser, createServiceClient } from "@/lib/supabase/server"
+import { unstable_cache, revalidateTag } from "next/cache"
 import { getTodayInTimezone, isNewDayInTimezone } from "@/lib/utils/timezone"
 import { getUserTimezone } from "@/lib/utils/user-helpers"
 import type { HabitWithStatus, HabitsResult, ProgressResult } from "@/lib/types"
 
-async function checkAndResetHabitsIfNeeded() {
+async function checkAndResetHabitsIfNeeded(userId: string) {
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) return
-
   const timezone = await getUserTimezone()
   const today = getTodayInTimezone(timezone)
 
@@ -21,7 +15,7 @@ async function checkAndResetHabitsIfNeeded() {
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("last_habit_reset")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single()
 
     if (error) {
@@ -34,7 +28,7 @@ async function checkAndResetHabitsIfNeeded() {
     // Check if it's a new day
     if (isNewDayInTimezone(lastReset, timezone)) {
       // Update last reset date
-      await supabase.from("profiles").update({ last_habit_reset: today }).eq("id", user.id)
+      await supabase.from("profiles").update({ last_habit_reset: today }).eq("id", userId)
       // Note: We don't delete old logs, we just create new ones for today
     }
   } catch {
@@ -43,47 +37,54 @@ async function checkAndResetHabitsIfNeeded() {
   }
 }
 
-export async function getUserHabits(): Promise<HabitsResult> {
-  const supabase = await createClient()
+// Cached habits fetch - uses service client for cache compatibility
+const getCachedHabits = unstable_cache(
+  async (userId: string) => {
+    const supabase = createServiceClient()
+    const { data: habits, error } = await supabase
+      .from("habits")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+    if (error) throw error
+    return habits
+  },
+  ["user-habits"],
+  { revalidate: 30, tags: ["user-habits"] }
+)
+
+export async function getUserHabits(): Promise<HabitsResult> {
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { habits: [], error: "Not authenticated" }
   }
 
-  await checkAndResetHabitsIfNeeded()
+  await checkAndResetHabitsIfNeeded(user.id)
 
-  // Get user's habits
-  const { data: habits, error: habitsError } = await supabase
-    .from("habits")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-
-  if (habitsError) {
-    console.error("[Habits] Error fetching habits:", habitsError)
-    return { habits: [], error: habitsError.message }
-  }
-
+  const supabase = await createClient()
   const timezone = await getUserTimezone()
   const today = getTodayInTimezone(timezone)
 
-  const { data: logs, error: logsError } = await supabase
-    .from("habit_logs")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("logged_at", today)
+  // Fetch habits and logs in parallel
+  const [habits, logsResult] = await Promise.all([
+    getCachedHabits(user.id),
+    supabase
+      .from("habit_logs")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("logged_at", today)
+  ])
 
-  if (logsError) {
-    console.error("[Habits] Error fetching habit logs:", logsError)
+  if (!habits) {
+    return { habits: [], error: null }
   }
 
+  const logs = logsResult.data
+
   // Merge habits with today's completion status
-  const habitsWithStatus: HabitWithStatus[] = (habits || []).map((habit) => {
+  const habitsWithStatus: HabitWithStatus[] = habits.map((habit) => {
     const log = logs?.find((l) => l.habit_id === habit.id)
     return {
       ...habit,
@@ -99,16 +100,13 @@ export async function toggleHabitCompletion(
   habitId: string, 
   currentlyCompleted: boolean
 ): Promise<{ success: boolean; error: string | null }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { success: false, error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   const timezone = await getUserTimezone()
   const today = getTodayInTimezone(timezone)
@@ -187,16 +185,13 @@ export async function toggleHabitCompletion(
 }
 
 export async function createDefaultHabits(): Promise<{ success: boolean; error: string | null; message?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { success: false, error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   // Check if user already has habits
   const { data: existingHabits } = await supabase
@@ -231,6 +226,7 @@ export async function createDefaultHabits(): Promise<{ success: boolean; error: 
     return { success: false, error: insertError.message }
   }
 
+  revalidateTag("user-habits")
   return { success: true, error: null }
 }
 
@@ -239,16 +235,13 @@ export async function createHabit(
   category: string, 
   frequency: string
 ): Promise<{ success: boolean; habit?: HabitWithStatus; error: string | null }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { success: false, error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from("habits")
@@ -268,6 +261,7 @@ export async function createHabit(
     return { success: false, error: error.message }
   }
 
+  revalidateTag("user-habits")
   return { 
     success: true, 
     habit: { ...data, completed: false, logId: null }, 
@@ -281,16 +275,13 @@ export async function updateHabit(
   category: string, 
   frequency: string
 ): Promise<{ success: boolean; habit?: HabitWithStatus; error: string | null }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { success: false, error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from("habits")
@@ -309,6 +300,7 @@ export async function updateHabit(
     return { success: false, error: error.message }
   }
 
+  revalidateTag("user-habits")
   return { 
     success: true, 
     habit: { ...data, completed: false, logId: null }, 
@@ -317,16 +309,13 @@ export async function updateHabit(
 }
 
 export async function deleteHabit(habitId: string): Promise<{ success: boolean; error: string | null }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { success: false, error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   // Delete all habit logs first
   await supabase.from("habit_logs").delete().eq("habit_id", habitId).eq("user_id", user.id)
@@ -343,31 +332,18 @@ export async function deleteHabit(habitId: string): Promise<{ success: boolean; 
     return { success: false, error: error.message }
   }
 
+  revalidateTag("user-habits")
   return { success: true, error: null }
 }
 
 export async function getWeeklyProgress(): Promise<ProgressResult> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { progress: 0, error: "Not authenticated" }
   }
 
-  // Get all user's habits
-  const { data: habits, error: habitsError } = await supabase
-    .from("habits")
-    .select("id")
-    .eq("user_id", user.id)
-
-  if (habitsError || !habits || habits.length === 0) {
-    return { progress: 0, error: null }
-  }
-
+  const supabase = await createClient()
   const timezone = await getUserTimezone()
   const today = getTodayInTimezone(timezone)
 
@@ -376,16 +352,17 @@ export async function getWeeklyProgress(): Promise<ProgressResult> {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   const startDate = sevenDaysAgo.toISOString().split("T")[0]
 
-  const { data: logs, error: logsError } = await supabase
-    .from("habit_logs")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("logged_at", startDate)
-    .lte("logged_at", today)
+  // Fetch habits and logs in parallel
+  const [habitsResult, logsResult] = await Promise.all([
+    supabase.from("habits").select("id").eq("user_id", user.id),
+    supabase.from("habit_logs").select("completed").eq("user_id", user.id).gte("logged_at", startDate).lte("logged_at", today)
+  ])
 
-  if (logsError) {
-    console.error("[Habits] Error fetching habit logs:", logsError)
-    return { progress: 0, error: logsError.message }
+  const habits = habitsResult.data
+  const logs = logsResult.data
+
+  if (!habits || habits.length === 0) {
+    return { progress: 0, error: null }
   }
 
   // Calculate progress

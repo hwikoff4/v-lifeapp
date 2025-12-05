@@ -76,46 +76,62 @@ export function ManageHabitsModal({ isOpen, onClose, habits, onHabitsChange }: M
     setIsSaving(true)
 
     try {
+      let result
       if (isAddingNew) {
-        const result = await createHabit(formData.name, formData.category, formData.frequency)
-        if (result.success) {
+        result = await createHabit(formData.name, formData.category, formData.frequency)
+        if (result && result.success) {
           toast({
             title: "Success",
             description: "Habit created successfully",
           })
-          onHabitsChange()
+          await onHabitsChange()
           setIsAddingNew(false)
           setFormData({ name: "", category: "fitness", frequency: "daily" })
         } else {
+          const errorMessage = result?.error || "Failed to create habit"
+          console.error("[ManageHabits] Failed to create habit:", errorMessage)
+          setFormError(errorMessage)
           toast({
             title: "Error",
-            description: result.error || "Failed to create habit",
+            description: errorMessage,
             variant: "destructive",
           })
         }
       } else if (editingHabit) {
-        const result = await updateHabit(editingHabit.id, formData.name, formData.category, formData.frequency)
-        if (result.success) {
+        result = await updateHabit(editingHabit.id, formData.name, formData.category, formData.frequency)
+        if (result && result.success) {
           toast({
             title: "Success",
             description: "Habit updated successfully",
           })
-          onHabitsChange()
+          await onHabitsChange()
           setEditingHabit(null)
           setFormData({ name: "", category: "fitness", frequency: "daily" })
         } else {
+          const errorMessage = result?.error || "Failed to update habit"
+          console.error("[ManageHabits] Failed to update habit:", errorMessage)
+          setFormError(errorMessage)
           toast({
             title: "Error",
-            description: result.error || "Failed to update habit",
+            description: errorMessage,
             variant: "destructive",
           })
         }
+      } else {
+        console.error("[ManageHabits] Invalid state: neither adding nor editing")
+        toast({
+          title: "Error",
+          description: "Invalid operation state",
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error("[v0] Error saving habit:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to save habit"
+      console.error("[ManageHabits] Error saving habit:", error)
+      setFormError(errorMessage)
       toast({
         title: "Error",
-        description: "Failed to save habit",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {

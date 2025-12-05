@@ -1,7 +1,23 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { ClientRootLayout } from "./ClientRootLayout"
+import { DM_Sans, Outfit } from "next/font/google"
+import { Providers } from "./ClientRootLayout"
 import "./globals.css"
+
+// DM Sans - clean, modern, geometric sans-serif for body text
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-dm-sans",
+})
+
+// Outfit - bold, distinctive geometric sans for headings
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  display: "swap",
+  variable: "--font-outfit",
+})
 
 export const metadata: Metadata = {
   title: "V-Life Fitness",
@@ -89,7 +105,7 @@ export const metadata: Metadata = {
     ],
   },
   manifest: "/manifest.json",
-    generator: 'v0.app'
+  generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -97,5 +113,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  return <ClientRootLayout>{children}</ClientRootLayout>
+  return (
+    <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${outfit.variable}`}>
+      <body className={`${dmSans.className} font-sans antialiased`}>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
 }

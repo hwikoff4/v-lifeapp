@@ -1,21 +1,18 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthUser } from "@/lib/supabase/server"
 import { getTodayInTimezone } from "@/lib/utils/timezone"
 import { getUserTimezone } from "@/lib/utils/user-helpers"
 import type { StreakStats, Milestone, HabitStreakDetail, WeeklyActivityDay } from "@/lib/types"
 
 export async function getStreakStats(): Promise<{ stats: StreakStats | null; error: string | null }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { stats: null, error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   const timezone = await getUserTimezone()
   const today = getTodayInTimezone(timezone)
@@ -144,16 +141,13 @@ export async function getStreakStats(): Promise<{ stats: StreakStats | null; err
 }
 
 export async function getMilestones(): Promise<{ milestones: Milestone[]; error: string | null }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthUser()
 
   if (authError || !user) {
     return { milestones: [], error: "Not authenticated" }
   }
+
+  const supabase = await createClient()
 
   // Get user's habits
   const { data: habits } = await supabase

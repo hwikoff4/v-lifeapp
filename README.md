@@ -22,6 +22,12 @@ Continue building your app on:
 
 **[https://v0.app/chat/yJanAeZuveY](https://v0.app/chat/yJanAeZuveY)**
 
+## Production Readiness Notes
+
+- Onboarding now focuses purely on selecting a primary goal— the experimental AI body visualizer and its API route have been retired for launch.
+- Dashboard plan refresh, tools, nutrition, workouts, grocery list, community, and subscription flows are wired to Supabase so state persists across sessions.
+- Feedback actions (app ratings, referrals, subscriptions, weight tracking, progress photos, etc.) write directly to the database, making the experience fully live-ready.
+
 ## How It Works
 
 1. Create and modify your project using [v0.app](https://v0.app)

@@ -42,30 +42,46 @@ export function AccountSection({
             <div className="text-sm text-yellow-500 mb-2">⚠️ Please complete your profile</div>
           )}
           <ButtonGlow
+            type="button"
             variant="outline-glow"
             className="w-full justify-start"
-            onClick={onEditProfile}
+            onClick={(e) => {
+              e.stopPropagation()
+              onEditProfile()
+            }}
           >
             Edit Profile
           </ButtonGlow>
           <ButtonGlow
+            type="button"
             variant="outline-glow"
             className="w-full justify-start"
-            onClick={onChangePassword}
+            onClick={(e) => {
+              e.stopPropagation()
+              onChangePassword()
+            }}
           >
             Change Password
           </ButtonGlow>
           <ButtonGlow
+            type="button"
             variant="outline-glow"
             className="w-full justify-start"
-            onClick={onManageSubscription}
+            onClick={(e) => {
+              e.stopPropagation()
+              onManageSubscription()
+            }}
           >
             Manage Subscription
           </ButtonGlow>
           <ButtonGlow
+            type="button"
             variant="outline-glow"
             className="w-full justify-start text-red-400 hover:text-red-300"
-            onClick={onSignOut}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSignOut()
+            }}
           >
             <LogOut className="mr-2 h-4 w-4" />
             Sign Out

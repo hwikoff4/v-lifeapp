@@ -1,21 +1,16 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthUser } from "@/lib/supabase/server"
 
 export async function getReferralStats() {
   try {
-    const supabase = await createClient()
-
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    const { user, error: userError } = await getAuthUser()
 
     if (userError || !user) {
-      console.error("[v0] Get user error:", userError)
       return { error: "Not authenticated", stats: null }
     }
+
+    const supabase = await createClient()
 
     // Get user's profile with referral code and credits
     const { data: profile, error: profileError } = await supabase

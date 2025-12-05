@@ -44,6 +44,9 @@ const config = {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          warm: "hsl(var(--accent-warm))",
+          hot: "hsl(var(--accent-hot))",
+          cool: "hsl(var(--accent-cool))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -54,11 +57,11 @@ const config = {
           foreground: "hsl(var(--card-foreground))",
         },
         vitalYellow: "#FFD700",
-        charcoal: "#1C1C1C",
+        charcoal: "#0a0a0f",
       },
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
-        poppins: ["Poppins", "sans-serif"],
+        sans: ["var(--font-dm-sans)", "DM Sans", "sans-serif"],
+        heading: ["var(--font-outfit)", "Outfit", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -79,8 +82,31 @@ const config = {
           "50%": { opacity: "0.5" },
         },
         glow: {
-          "0%, 100%": { boxShadow: "0 0 10px #FFD700" },
-          "50%": { boxShadow: "0 0 20px #FFD700" },
+          "0%, 100%": { boxShadow: "0 0 15px hsl(45 100% 51% / 0.4)" },
+          "50%": { boxShadow: "0 0 30px hsl(45 100% 51% / 0.6)" },
+        },
+        "float": {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-10px)" },
+        },
+        "gradient-shift": {
+          "0%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+          "100%": { backgroundPosition: "0% 50%" },
+        },
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(20px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-in": {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "blob": {
+          "0%": { transform: "translate(0px, 0px) scale(1)" },
+          "33%": { transform: "translate(30px, -30px) scale(1.1)" },
+          "66%": { transform: "translate(-20px, 20px) scale(0.9)" },
+          "100%": { transform: "translate(0px, 0px) scale(1)" },
         },
       },
       animation: {
@@ -88,6 +114,11 @@ const config = {
         "accordion-up": "accordion-up 0.2s ease-out",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         glow: "glow 2s ease-in-out infinite",
+        "float": "float 3s ease-in-out infinite",
+        "gradient-shift": "gradient-shift 8s ease infinite",
+        "fade-up": "fade-up 0.5s ease-out forwards",
+        "scale-in": "scale-in 0.3s ease-out forwards",
+        "blob": "blob 7s infinite",
       },
     },
   },

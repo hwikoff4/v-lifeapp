@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { Home, Dumbbell, Utensils, Users, Bot } from "lucide-react"
@@ -15,9 +16,34 @@ const rightNavItems = [
   { icon: Users, label: "Community", path: "/community" },
 ]
 
-export function BottomNav() {
-  const pathname = usePathname()
+// Memoized nav item to prevent unnecessary re-renders
+const NavItem = memo(function NavItem({ 
+  path, 
+  label, 
+  Icon, 
+  isActive 
+}: { 
+  path: string
+  label: string
+  Icon: typeof Home
+  isActive: boolean 
+}) {
+  return (
+    <Link
+      href={path}
+      prefetch={true}
+      className="flex flex-col items-center justify-center min-w-[60px]"
+    >
+      <Icon className={cn("h-6 w-6", isActive ? "text-accent" : "text-white/60")} />
+      <span className={cn("mt-1 text-xs", isActive ? "text-accent font-medium" : "text-white/60")}>
+        {label}
+      </span>
+    </Link>
+  )
+})
 
+export const BottomNav = memo(function BottomNav() {
+  const pathname = usePathname()
   const isVBotActive = pathname === "/vbot"
 
   return (
@@ -25,49 +51,25 @@ export function BottomNav() {
       <div className="mx-auto flex h-20 max-w-md items-end justify-between px-4 pb-2 relative">
         {/* Left nav items */}
         <div className="flex gap-2 mr-2">
-          {leftNavItems.map((item) => {
-            const isActive = pathname === item.path
-
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                prefetch={true}
-                className="flex flex-col items-center justify-center min-w-[60px]"
-              >
-                <item.icon className={cn("h-6 w-6 transition-all", isActive ? "text-accent" : "text-white/60")} />
-                <span
-                  className={cn("mt-1 text-xs transition-all", isActive ? "text-accent font-medium" : "text-white/60")}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            )
-          })}
+          {leftNavItems.map((item) => (
+            <NavItem
+              key={item.path}
+              path={item.path}
+              label={item.label}
+              Icon={item.icon}
+              isActive={pathname === item.path}
+            />
+          ))}
         </div>
-
-        <style jsx>{`
-          @keyframes subtle-glow {
-            0%, 100% {
-              box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
-            }
-            50% {
-              box-shadow: 0 0 25px rgba(255, 215, 0, 0.7);
-            }
-          }
-          .animate-subtle-glow {
-            animation: subtle-glow 3s ease-in-out infinite;
-          }
-        `}</style>
 
         <Link
           href="/vbot"
           prefetch={true}
           className={cn(
-            "absolute left-1/2 -translate-x-1/2 -top-4 flex h-14 w-14 items-center justify-center rounded-full transition-all border-2 border-black",
+            "absolute left-1/2 -translate-x-1/2 -top-4 flex h-14 w-14 items-center justify-center rounded-full border-2 border-black",
             isVBotActive
               ? "bg-accent scale-105 shadow-[0_0_20px_rgba(255,215,0,0.6)]"
-              : "bg-gradient-to-br from-accent to-accent/90 hover:scale-110 animate-subtle-glow",
+              : "bg-gradient-to-br from-accent to-accent/90 hover:scale-110 shadow-[0_0_15px_rgba(255,215,0,0.5)]",
           )}
         >
           <Bot className="h-7 w-7 text-black" strokeWidth={2.5} />
@@ -75,27 +77,17 @@ export function BottomNav() {
 
         {/* Right nav items */}
         <div className="flex gap-2 ml-2">
-          {rightNavItems.map((item) => {
-            const isActive = pathname === item.path
-
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                prefetch={true}
-                className="flex flex-col items-center justify-center min-w-[60px]"
-              >
-                <item.icon className={cn("h-6 w-6 transition-all", isActive ? "text-accent" : "text-white/60")} />
-                <span
-                  className={cn("mt-1 text-xs transition-all", isActive ? "text-accent font-medium" : "text-white/60")}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            )
-          })}
+          {rightNavItems.map((item) => (
+            <NavItem
+              key={item.path}
+              path={item.path}
+              label={item.label}
+              Icon={item.icon}
+              isActive={pathname === item.path}
+            />
+          ))}
         </div>
       </div>
     </div>
   )
-}
+})
