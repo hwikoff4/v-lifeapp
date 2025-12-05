@@ -5,4 +5,5 @@ export { StreaksSection } from "./StreaksSection"
 export { UnitsSection } from "./UnitsSection"
 export { PrivacySection } from "./PrivacySection"
 export { AboutSection } from "./AboutSection"
+export { PlanSection } from "./PlanSection"
 

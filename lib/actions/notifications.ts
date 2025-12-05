@@ -16,6 +16,12 @@ export interface NotificationPreferences {
   habitReminders: boolean
 }
 
+function normalizeTime(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback
+  // Accept HH:MM or HH:MM:SS, but UI expects HH:MM
+  return value.slice(0, 5)
+}
+
 export async function getNotificationPreferences() {
   try {
     const { user, error: authError } = await getAuthUser()
@@ -42,11 +48,11 @@ export async function getNotificationPreferences() {
     const preferences: NotificationPreferences = {
       notificationsEnabled: profile.notifications_enabled ?? true,
       workoutReminders: profile.workout_reminders ?? true,
-      workoutReminderTime: profile.workout_reminder_time || "08:00:00",
+      workoutReminderTime: normalizeTime(profile.workout_reminder_time, "08:00"),
       mealReminders: profile.meal_reminders ?? true,
-      breakfastReminderTime: profile.breakfast_reminder_time || "08:00:00",
-      lunchReminderTime: profile.lunch_reminder_time || "12:00:00",
-      dinnerReminderTime: profile.dinner_reminder_time || "18:00:00",
+      breakfastReminderTime: normalizeTime(profile.breakfast_reminder_time, "08:00"),
+      lunchReminderTime: normalizeTime(profile.lunch_reminder_time, "12:00"),
+      dinnerReminderTime: normalizeTime(profile.dinner_reminder_time, "18:00"),
       progressUpdates: profile.progress_updates ?? true,
       streakWarnings: profile.streak_warnings ?? true,
       achievementNotifications: profile.achievement_notifications ?? true,

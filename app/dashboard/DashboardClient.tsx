@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { ArrowRight, Zap, CheckCircle, RefreshCw, User, Loader2, Settings, Edit2, Sparkles, Target } from "lucide-react"
+import { ArrowRight, Zap, CheckCircle, User, Settings, Edit2, Sparkles, Target } from "lucide-react"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
@@ -15,7 +15,6 @@ import type { HabitWithStatus, ProfileFormData } from "@/lib/types"
 
 // Lazy load modals - they're only needed when opened
 const UpdateProfileModal = lazy(() => import("@/app/update-profile-modal").then(m => ({ default: m.UpdateProfileModal })))
-const RefreshPlanModal = lazy(() => import("@/app/refresh-plan-modal").then(m => ({ default: m.RefreshPlanModal })))
 const ManageHabitsModal = lazy(() => import("@/app/manage-habits-modal").then(m => ({ default: m.ManageHabitsModal })))
 
 // Animation variants for staggered children
@@ -56,10 +55,7 @@ export default function DashboardClient({
   const { toast } = useToast()
   
   // UI states
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [refreshMessage, setRefreshMessage] = useState("")
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
-  const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false)
   const [isManageHabitsModalOpen, setIsManageHabitsModalOpen] = useState(false)
   
   // Data states - initialized from server
@@ -126,42 +122,6 @@ export default function DashboardClient({
     }
   }
 
-  const handleRefreshPlanClick = () => {
-    setIsRefreshModalOpen(true)
-  }
-
-  const handleRefreshPlanConfirm = async () => {
-    setIsRefreshing(true)
-    setRefreshMessage("")
-
-    try {
-      setRefreshMessage("Analyzing your current progress...")
-      const { refreshTrainingPlan } = await import("@/lib/actions/workouts")
-      const refreshResult = await refreshTrainingPlan()
-      if (!refreshResult.success) {
-        throw new Error(refreshResult.error || "Unable to refresh plan")
-      }
-
-      const progressResult = await getWeeklyProgress()
-      if (progressResult.progress !== undefined) {
-        setProgress(progressResult.progress)
-      }
-
-      setRefreshMessage("✨ Your plan has been refreshed with new AI insights!")
-
-      setTimeout(() => {
-        setRefreshMessage("")
-      }, 3000)
-    } catch (error) {
-      setRefreshMessage("❌ Failed to refresh plan. Please try again.")
-      setTimeout(() => {
-        setRefreshMessage("")
-      }, 3000)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
   const reloadHabits = useCallback(async () => {
     try {
       // Fetch updated habits from server
@@ -212,29 +172,6 @@ export default function DashboardClient({
           </div>
         </motion.div>
 
-        {/* Refresh Status Toast */}
-        {(isRefreshing || refreshMessage) && (
-          <motion.div 
-            className="mb-6"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Card className={`glass-card ${refreshMessage.includes("✨") ? "glass-card-accent" : refreshMessage.includes("❌") ? "border-destructive/50" : ""}`}>
-              <CardContent className="p-4">
-                <div className="flex items-center">
-                  {isRefreshing && <Loader2 className="mr-3 h-5 w-5 animate-spin text-accent" />}
-                  {refreshMessage.includes("✨") && <Sparkles className="mr-3 h-5 w-5 text-accent" />}
-                  {refreshMessage.includes("❌") && <div className="mr-3 h-5 w-5 rounded-full bg-destructive" />}
-                  <p className={`text-sm font-medium ${refreshMessage.includes("✨") ? "text-accent" : refreshMessage.includes("❌") ? "text-destructive" : "text-foreground"}`}>
-                    {refreshMessage || "Generating your personalized plan..."}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
         {/* Progress Card - Now with Circular Progress */}
         <motion.div className="mb-6" variants={itemVariants}>
           <Card className="glass-card overflow-hidden">
@@ -258,22 +195,6 @@ export default function DashboardClient({
                         onClick={() => setIsProfileModalOpen(true)}
                       >
                         <User className="mr-1 h-3 w-3" /> Profile
-                      </ButtonGlow>
-                    </motion.div>
-                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                      <ButtonGlow
-                        variant="outline-glow"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={handleRefreshPlanClick}
-                        disabled={isRefreshing}
-                      >
-                        {isRefreshing ? (
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        ) : (
-                          <RefreshCw className="mr-1 h-3 w-3" />
-                        )}
-                        Refresh
                       </ButtonGlow>
                     </motion.div>
                   </div>
@@ -403,16 +324,6 @@ export default function DashboardClient({
             onClose={() => setIsProfileModalOpen(false)}
             currentProfile={profileData}
             onUpdate={(profile) => handleProfileUpdate(profile)}
-          />
-        </Suspense>
-      )}
-      {isRefreshModalOpen && (
-        <Suspense fallback={null}>
-          <RefreshPlanModal
-            isOpen={isRefreshModalOpen}
-            onClose={() => setIsRefreshModalOpen(false)}
-            onConfirm={handleRefreshPlanConfirm}
-            userName={userName}
           />
         </Suspense>
       )}

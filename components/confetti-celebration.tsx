@@ -251,3 +251,4 @@ export function CelebrationModal({ isOpen, onClose, workoutName, exerciseCount }
   )
 }
 
+

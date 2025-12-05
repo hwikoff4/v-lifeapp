@@ -29,6 +29,7 @@ import {
   UnitsSection,
   PrivacySection,
   AboutSection,
+  PlanSection,
 } from "./components"
 import type { ProfileFormData, ReferralStats, StreakStats, Milestone, NotificationPreferences } from "@/lib/types"
 
@@ -37,6 +38,7 @@ const UpdateProfileModal = lazy(() => import("@/app/update-profile-modal").then(
 const ChangePasswordModal = lazy(() => import("@/app/change-password-modal").then(m => ({ default: m.ChangePasswordModal })))
 const ManageSubscriptionModal = lazy(() => import("@/app/manage-subscription-modal").then(m => ({ default: m.ManageSubscriptionModal })))
 const RateAppModal = lazy(() => import("@/components/rate-app-modal").then(m => ({ default: m.RateAppModal })))
+const RefreshPlanModal = lazy(() => import("@/app/refresh-plan-modal").then(m => ({ default: m.RefreshPlanModal })))
 
 interface SettingsClientProps {
   initialProfileData: ProfileFormData
@@ -65,6 +67,8 @@ export default function SettingsClient({
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false)
   const [manageSubscriptionModalOpen, setManageSubscriptionModalOpen] = useState(false)
   const [rateAppModalOpen, setRateAppModalOpen] = useState(false)
+  const [isStartFreshModalOpen, setIsStartFreshModalOpen] = useState(false)
+  const [isStartingFresh, setIsStartingFresh] = useState(false)
 
   // Data states - initialized from server
   const [profileData, setProfileData] = useState<ProfileFormData>(initialProfileData)
@@ -199,6 +203,37 @@ export default function SettingsClient({
     }
   }
 
+  const handleStartFresh = async () => {
+    if (isStartingFresh) return
+
+    setIsStartingFresh(true)
+    toast({
+      title: "Starting fresh",
+      description: "Regenerating your plan with new insights...",
+    })
+
+    try {
+      const { refreshTrainingPlan } = await import("@/lib/actions/workouts")
+      const refreshResult = await refreshTrainingPlan()
+      if (!refreshResult.success) {
+        throw new Error(refreshResult.error || "Unable to start fresh right now")
+      }
+
+      toast({
+        title: "Plan updated",
+        description: "Your plan has been refreshed and will use your latest data.",
+      })
+    } catch {
+      toast({
+        title: "Start fresh failed",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsStartingFresh(false)
+    }
+  }
+
   const handleSignOut = async () => {
     try {
       const supabase = createClient()
@@ -328,6 +363,11 @@ export default function SettingsClient({
             timezone={profileData.timezone || "America/New_York"}
             onMetricChange={setUseMetric}
             onTimezoneChange={handleTimezoneChange}
+          />
+
+          <PlanSection
+            isStartingFresh={isStartingFresh}
+            onStartFresh={() => setIsStartFreshModalOpen(true)}
           />
 
           <PrivacySection
@@ -469,6 +509,17 @@ export default function SettingsClient({
           <RateAppModal
             isOpen={rateAppModalOpen}
             onClose={() => setRateAppModalOpen(false)}
+          />
+        </Suspense>
+      )}
+
+      {isStartFreshModalOpen && (
+        <Suspense fallback={null}>
+          <RefreshPlanModal
+            isOpen={isStartFreshModalOpen}
+            onClose={() => setIsStartFreshModalOpen(false)}
+            onConfirm={handleStartFresh}
+            userName={profileData.name?.split(" ")[0] || "there"}
           />
         </Suspense>
       )}

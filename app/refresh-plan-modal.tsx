@@ -76,8 +76,8 @@ export function RefreshPlanModal({ isOpen, onClose, onConfirm, userName }: Refre
                     <AlertTriangle className="h-6 w-6 text-orange-400" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-white">Refresh Your Plan</h3>
-                    <p className="text-xs text-accent">This will update your entire fitness strategy</p>
+                    <h3 className="font-bold text-white">Start Fresh</h3>
+                    <p className="text-xs text-accent">Regenerate your entire fitness strategy</p>
                   </div>
                 </div>
                 <button onClick={onClose} className="rounded-full p-1 hover:bg-white/10">
@@ -135,7 +135,7 @@ export function RefreshPlanModal({ isOpen, onClose, onConfirm, userName }: Refre
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
                   <div className="flex items-center mb-2">
                     <RefreshCw className="h-4 w-4 text-blue-400 mr-2" />
-                    <span className="text-blue-400 font-medium text-sm">Why refresh?</span>
+                    <span className="text-blue-400 font-medium text-sm">Why start fresh?</span>
                   </div>
                   <p className="text-xs text-white/80">
                     Based on your recent progress and performance, our AI can create more effective workouts, better
@@ -150,7 +150,7 @@ export function RefreshPlanModal({ isOpen, onClose, onConfirm, userName }: Refre
                 </ButtonGlow>
                 <ButtonGlow variant="accent-glow" onClick={handleConfirm} className="flex-1">
                   <RefreshCw className="mr-2 h-4 w-4" />
-                  Yes, Refresh My Plan
+                  Yes, Start Fresh
                 </ButtonGlow>
               </div>
             </Card>
