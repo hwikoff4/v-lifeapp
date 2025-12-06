@@ -9,10 +9,13 @@ import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { Progress } from "@/components/ui/progress"
+import { Checkbox } from "@/components/ui/checkbox"
 import { MealSwapModal } from "@/app/meal-swap-modal"
+import { VitalFlowSupplementModal } from "@/app/vitalflow-supplement-modal"
 import { useToast } from "@/hooks/use-toast"
 import type { Macros, Supplement } from "@/lib/types"
 import type { DailyMeal } from "@/lib/actions/nutrition"
+import { cn } from "@/lib/utils"
 
 interface NutritionClientProps {
   meals: DailyMeal[]
@@ -44,6 +47,8 @@ export function NutritionClient({
   const [alternatives, setAlternatives] = useState<MealAlternative[]>([])
   const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [updatingMealId, setUpdatingMealId] = useState<string | null>(null)
+  const [isVitalFlowModalOpen, setIsVitalFlowModalOpen] = useState(false)
 
   const handleRefreshPlan = async () => {
     if (isRefreshing) return
@@ -72,14 +77,57 @@ export function NutritionClient({
     }
   }
 
+  const eatenTotals = useMemo(() => {
+    if (mealPlan.length === 0) {
+      return totals
+    }
+
+    return mealPlan.reduce(
+      (acc, meal) => {
+        if (meal.isEaten) {
+          acc.calories += meal.calories
+          acc.protein += meal.protein
+          acc.carbs += meal.carbs
+          acc.fat += meal.fat
+        }
+        return acc
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 },
+    )
+  }, [mealPlan, totals])
+
   const macrosWithCurrent = useMemo(() => {
     return {
-      calories: { ...macros.calories, current: totals.calories },
-      protein: { ...macros.protein, current: totals.protein },
-      carbs: { ...macros.carbs, current: totals.carbs },
-      fat: { ...macros.fat, current: totals.fat },
+      calories: { ...macros.calories, current: eatenTotals.calories },
+      protein: { ...macros.protein, current: eatenTotals.protein },
+      carbs: { ...macros.carbs, current: eatenTotals.carbs },
+      fat: { ...macros.fat, current: eatenTotals.fat },
     }
-  }, [macros, totals])
+  }, [macros, eatenTotals])
+
+  const handleToggleEaten = async (meal: DailyMeal, nextValue: boolean) => {
+    const previousValue = meal.isEaten
+    setUpdatingMealId(meal.logId)
+    setMealPlan((prev) => prev.map((m) => (m.logId === meal.logId ? { ...m, isEaten: nextValue } : m)))
+
+    try {
+      const { toggleMealEaten } = await import("@/lib/actions/nutrition")
+      const result = await toggleMealEaten(meal.logId, nextValue)
+      if (!result.success) {
+        throw new Error(result.error || "Unable to update meal status")
+      }
+    } catch (err) {
+      console.error("[Nutrition] Failed to toggle meal eaten state:", err)
+      setMealPlan((prev) => prev.map((m) => (m.logId === meal.logId ? { ...m, isEaten: previousValue } : m)))
+      toast({
+        title: "Could not update meal",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingMealId(null)
+    }
+  }
 
   const openSwapModal = async (meal: DailyMeal) => {
     setSelectedMealForSwap(meal)
@@ -147,6 +195,7 @@ export function NutritionClient({
           <Card className="border-white/10 bg-black/50 backdrop-blur-sm">
             <CardContent className="p-4">
               <h2 className="mb-3 text-lg font-bold text-white">Macros Summary</h2>
+              <p className="mb-3 text-xs text-white/60">Based on eaten meals</p>
 
               <div className="space-y-3">
                 <div>
@@ -198,40 +247,77 @@ export function NutritionClient({
           <h2 className="mb-3 text-lg font-bold text-white">Today's Meals</h2>
 
           <div className="space-y-3">
-            {mealPlan.map((meal) => (
-              <Card key={meal.logId} className="overflow-hidden border-white/10 bg-black/50 backdrop-blur-sm">
-                <CardContent className="p-0">
-                  <div className="flex">
-                    <div className="h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5">
-                      <img
-                        src={meal.image || "/placeholder.svg"}
-                        alt={meal.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-1 flex-col justify-between p-3">
-                      <div>
-                        <span className="text-xs font-medium text-accent">{meal.type}</span>
-                        <h3 className="font-medium text-white">{meal.name}</h3>
+            {mealPlan.map((meal) => {
+              const isUpdating = updatingMealId === meal.logId
+              return (
+                <Card
+                  key={meal.logId}
+                  className={cn(
+                    "overflow-hidden border-white/10 bg-black/50 backdrop-blur-sm transition-colors",
+                    meal.isEaten && "border-accent/40 bg-black/40",
+                  )}
+                >
+                  <CardContent className="p-0">
+                    <div className="flex items-stretch">
+                      <div className="flex items-center justify-center px-3">
+                        <Checkbox
+                          checked={meal.isEaten}
+                          onCheckedChange={(checked) => handleToggleEaten(meal, checked === true)}
+                          disabled={isUpdating}
+                          aria-label={`${meal.isEaten ? "Mark as not eaten" : "Mark as eaten"}: ${meal.name}`}
+                          className="border-white/30 data-[state=checked]:border-accent data-[state=checked]:bg-accent/90"
+                        />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-white/70">{meal.calories} kcal</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openSwapModal(meal)}
-                            className="flex items-center justify-center w-8 h-8 rounded-full bg-accent/20 hover:bg-accent/30 transition-all group"
-                            title="Swap this meal"
-                          >
-                            <RotateCcw className="h-4 w-4 text-accent group-hover:rotate-180 transition-transform duration-300" />
-                          </button>
-                          <ChevronRight className="h-4 w-4 text-white/40" />
+                      <div
+                        className={cn(
+                          "h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5 transition-opacity",
+                          meal.isEaten && "opacity-70",
+                        )}
+                      >
+                        <img
+                          src={meal.image || "/placeholder.svg"}
+                          alt={meal.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div
+                        className={cn(
+                          "flex flex-1 flex-col justify-between p-3 transition-opacity",
+                          meal.isEaten && "opacity-70",
+                        )}
+                      >
+                        <div>
+                          <span className="text-xs font-medium text-accent">{meal.type}</span>
+                          <h3 className="font-medium text-white">{meal.name}</h3>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-white/70">{meal.calories} kcal</span>
+                            {meal.isEaten ? (
+                              <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                                Eaten
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openSwapModal(meal)}
+                              className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 transition-all hover:bg-accent/30 group"
+                              title="Swap this meal"
+                              type="button"
+                              disabled={isUpdating}
+                            >
+                              <RotateCcw className="h-4 w-4 text-accent transition-transform duration-300 group-hover:rotate-180" />
+                            </button>
+                            <ChevronRight className="h-4 w-4 text-white/40" />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         </motion.div>
 
@@ -313,25 +399,43 @@ export function NutritionClient({
               </div>
 
               <div className="space-y-2">
-                {supplements.map((supplement) => (
-                  <div
-                    key={supplement.id}
-                    className="flex items-center justify-between rounded-lg bg-black/30 p-3 transition-all hover:bg-black/40"
-                  >
-                    <div>
-                      <p className="font-medium text-white">{supplement.name}</p>
-                      <p className="text-xs text-white/60">{supplement.category}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-accent" />
-                  </div>
-                ))}
+                {supplements.length === 0 ? (
+                  <p className="text-sm text-white/70">Supplement guidance coming soon.</p>
+                ) : (
+                  supplements.map((supplement) => {
+                    const isVitalFlow = supplement.name === "Vital Flow" || supplement.featured
+                    
+                    if (isVitalFlow) {
+                      return (
+                        <button
+                          key={supplement.id}
+                          type="button"
+                          onClick={() => setIsVitalFlowModalOpen(true)}
+                          className="flex w-full items-center justify-between rounded-lg bg-black/30 p-3 text-left transition-all hover:bg-black/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        >
+                          <div>
+                            <p className="font-medium text-white">{supplement.name}</p>
+                            <p className="text-xs text-white/60">{supplement.category}</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-accent" aria-hidden />
+                        </button>
+                      )
+                    }
+                    
+                    return (
+                      <div
+                        key={supplement.id}
+                        className="flex w-full items-center justify-between rounded-lg bg-black/30 p-3"
+                      >
+                        <div>
+                          <p className="font-medium text-white">{supplement.name}</p>
+                          <p className="text-xs text-white/60">{supplement.category}</p>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
               </div>
-
-              <Link href="/tools" className="block mt-3">
-                <ButtonGlow variant="accent-glow" className="w-full" size="sm" type="button">
-                  View All Supplements
-                </ButtonGlow>
-              </Link>
             </CardContent>
           </Card>
         </motion.div>
@@ -344,6 +448,11 @@ export function NutritionClient({
           alternatives={alternatives}
           onSwap={handleMealSwap}
           loadingAlternatives={isLoadingAlternatives}
+        />
+
+        <VitalFlowSupplementModal
+          isOpen={isVitalFlowModalOpen}
+          onClose={() => setIsVitalFlowModalOpen(false)}
         />
       </div>
 

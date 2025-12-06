@@ -3,7 +3,13 @@ import { getUserHabits, createDefaultHabits } from "@/lib/actions/habits"
 import { getRecommendedSupplements } from "@/lib/actions/nutrition"
 import { ToolsClient } from "./ToolsClient"
 
-export default async function ToolsPage() {
+type ToolsPageProps = {
+  searchParams?: {
+    supplement?: string
+  }
+}
+
+export default async function ToolsPage({ searchParams }: ToolsPageProps) {
   const [weightResult, photoResult, habitsResult, supplements] = await Promise.all([
     getWeightEntries(),
     getProgressPhotos(),
@@ -24,6 +30,7 @@ export default async function ToolsPage() {
       progressPhotos={photoResult.photos}
       supplements={supplements}
       habits={habits}
+      initialSupplementId={searchParams?.supplement}
     />
   )
 }

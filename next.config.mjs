@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Emit standalone output for lean Docker/Cloud Run images
+  output: "standalone",
   typescript: {
     ignoreBuildErrors: true,
   },

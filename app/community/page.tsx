@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, lazy, Suspense } from "react"
+import { useState, useEffect, lazy, Suspense, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   Heart,
@@ -35,6 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DEFAULT_AVATAR } from "@/lib/stock-images"
+import { useAppData } from "@/lib/contexts/app-data-context"
 
 // Lazy load modal
 const CreatePostModal = lazy(() => import("@/app/create-post-modal").then(m => ({ default: m.CreatePostModal })))
@@ -87,6 +88,13 @@ type Challenge = {
 
 export default function Community() {
   const router = useRouter()
+  
+  // Get user name from cached app data
+  const { appData } = useAppData()
+  const currentUserName = useMemo(() => {
+    return appData?.profile?.name || "User"
+  }, [appData?.profile?.name])
+  
   const [createPostModalOpen, setCreatePostModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
@@ -98,7 +106,6 @@ export default function Community() {
   const [posts, setPosts] = useState<Post[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [currentUserName, setCurrentUserName] = useState("User")
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [isLoadingChallenges, setIsLoadingChallenges] = useState(false)
 
@@ -112,9 +119,7 @@ export default function Community() {
     }
   }, [showLeaderboard])
 
-  useEffect(() => {
-    loadCurrentUser()
-  }, [])
+  // User name is now loaded from global AppDataProvider - no need to fetch
 
   useEffect(() => {
     if (selectedPost) {
@@ -129,15 +134,9 @@ export default function Community() {
   }, [showChallenges])
 
   const loadCurrentUser = async () => {
-    try {
-      const { getProfile } = await import("@/lib/actions/profile")
-      const result = await getProfile()
-      if (result.profile) {
-        setCurrentUserName(result.profile.name || "User")
-      }
-    } catch (error) {
-      console.error("Error loading user:", error)
-    }
+    // Profile is now loaded from global AppDataProvider
+    // This function is kept for compatibility but can be removed
+    // The userName is now set directly from appData in the component
   }
 
   const loadPosts = async () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { PlusCircle, LineChart, Weight, Camera, Pill } from "lucide-react"
@@ -20,6 +20,7 @@ interface ToolsClientProps {
   progressPhotos: ProgressPhoto[]
   supplements: Supplement[]
   habits: HabitWithStatus[]
+  initialSupplementId?: string | null
 }
 
 interface ProgressPhotoPreview {
@@ -31,7 +32,7 @@ interface ProgressPhotoPreview {
   imageUrl: string
 }
 
-export function ToolsClient({ weightEntries, progressPhotos, supplements, habits }: ToolsClientProps) {
+export function ToolsClient({ weightEntries, progressPhotos, supplements, habits, initialSupplementId = null }: ToolsClientProps) {
   const router = useRouter()
   const { toast } = useToast()
 
@@ -41,7 +42,8 @@ export function ToolsClient({ weightEntries, progressPhotos, supplements, habits
 
   const [habitList, setHabitList] = useState<HabitWithStatus[]>(habits)
   const [photoPreviews, setPhotoPreviews] = useState<ProgressPhotoPreview[]>([])
-  const [expandedSupplement, setExpandedSupplement] = useState<string | null>(null)
+  const [expandedSupplement, setExpandedSupplement] = useState<string | null>(initialSupplementId)
+  const supplementsSectionRef = useRef<HTMLDivElement | null>(null)
 
   const currentWeight = weightEntries[weightEntries.length - 1]?.weight || null
 
@@ -89,6 +91,14 @@ export function ToolsClient({ weightEntries, progressPhotos, supplements, habits
       isMounted = false
     }
   }, [progressPhotos])
+
+  useEffect(() => {
+    if (initialSupplementId && supplements.some((s) => s.id === initialSupplementId)) {
+      // Scroll the supplements section into view when arriving with a deep link.
+      supplementsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      setExpandedSupplement(initialSupplementId)
+    }
+  }, [initialSupplementId, supplements])
 
   const handleAddHabit = async (habit: { name: string; category: string; frequency: string }) => {
     try {
@@ -232,6 +242,7 @@ export function ToolsClient({ weightEntries, progressPhotos, supplements, habits
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.3 }}
+          ref={supplementsSectionRef}
         >
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">Supplements</h2>

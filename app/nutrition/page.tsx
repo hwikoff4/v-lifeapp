@@ -5,7 +5,7 @@ export default async function NutritionPage() {
   const [dailyPlan, targets, supplements] = await Promise.all([
     getDailyMealPlan(),
     getNutritionTargets(),
-    getRecommendedSupplements(),
+    getRecommendedSupplements(3),
   ])
 
   return (

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient, getAuthUser } from "@/lib/supabase/server"
-import type { Macros, Meal } from "@/lib/types"
+import type { Macros, Meal, Supplement } from "@/lib/types"
 import { getMealImage } from "@/lib/meal-images"
 
 const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack"] as const
@@ -19,6 +19,8 @@ interface DailyMeal {
   carbs: number
   fat: number
   image: string | null
+  isEaten: boolean
+  eatenAt: string | null
 }
 
 const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
@@ -397,6 +399,7 @@ async function persistGeneratedMeals(
     meal_id: inserted.id,
     meal_type: inserted.meal_type,
     consumed_at: dayStart.toISOString(),
+    is_eaten: false,
   }))
 
   const { error: logError } = await supabase.from("meal_logs").insert(logRows)
@@ -468,6 +471,8 @@ async function fetchMealsForDate(
         id,
         meal_type,
         consumed_at,
+        is_eaten,
+        eaten_at,
         meals:meal_id (
           id,
           name,
@@ -510,6 +515,8 @@ async function fetchMealsForDate(
       carbs: Number(log.meals.carbs || 0),
       fat: Number(log.meals.fat || 0),
       image: log.meals.image_url || getMealImage(log.meals.name),
+      isEaten: Boolean(log.is_eaten),
+      eatenAt: log.eaten_at || null,
     })
   }
 
@@ -569,10 +576,12 @@ export async function getDailyMealPlan() {
 
   const totals = todayMeals.reduce(
     (acc, meal) => {
-      acc.calories += meal.calories
-      acc.protein += meal.protein
-      acc.carbs += meal.carbs
-      acc.fat += meal.fat
+      if (meal.isEaten) {
+        acc.calories += meal.calories
+        acc.protein += meal.protein
+        acc.carbs += meal.carbs
+        acc.fat += meal.fat
+      }
       return acc
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
@@ -612,6 +621,31 @@ export async function swapMeal(logId: string, mealId: string) {
   if (updateError) {
     console.error("[Nutrition] Failed to swap meal:", updateError)
     return { success: false, error: "Unable to swap meal" }
+  }
+
+  revalidatePath("/nutrition")
+  return { success: true }
+}
+
+export async function toggleMealEaten(logId: string, isEaten: boolean) {
+  const { user, error } = await getAuthUser()
+  if (error || !user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  const supabase = await createClient()
+  const { error: updateError } = await supabase
+    .from("meal_logs")
+    .update({
+      is_eaten: isEaten,
+      eaten_at: isEaten ? new Date().toISOString() : null,
+    })
+    .eq("id", logId)
+    .eq("user_id", user.id)
+
+  if (updateError) {
+    console.error("[Nutrition] Failed to toggle meal eaten:", updateError)
+    return { success: false, error: "Unable to update meal status" }
   }
 
   revalidatePath("/nutrition")
@@ -665,13 +699,20 @@ export async function getNutritionTargets(): Promise<{ macros: Macros }> {
   return { macros: buildMacroTargets(profile) }
 }
 
-export async function getRecommendedSupplements(limit = 3) {
+export async function getRecommendedSupplements(limit?: number): Promise<Supplement[]> {
   const supabase = await createClient()
-  const { data } = await supabase
-    .from("supplements")
-    .select("*")
-    .order("featured", { ascending: false })
-    .limit(limit)
+  let query = supabase.from("supplements").select("*").order("featured", { ascending: false })
+
+  if (limit && limit > 0) {
+    query = query.limit(limit)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error("[Nutrition] Failed to load supplements:", error)
+    return []
+  }
 
   return data || []
 }

@@ -8,7 +8,7 @@ import { Accordion } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useState, useEffect, lazy, Suspense } from "react"
+import { useState, useEffect, lazy, Suspense, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { updateProfile } from "@/lib/actions/profile"
 import { createClient } from "@/lib/supabase/client"
@@ -21,6 +21,7 @@ import {
 } from "@/lib/notifications/push"
 import { savePushSubscription } from "@/lib/actions/notifications"
 import { exportUserData } from "@/lib/actions/export-data"
+import { useAppData } from "@/lib/contexts/app-data-context"
 import {
   AccountSection,
   ReferralsSection,
@@ -40,23 +41,12 @@ const ManageSubscriptionModal = lazy(() => import("@/app/manage-subscription-mod
 const RateAppModal = lazy(() => import("@/components/rate-app-modal").then(m => ({ default: m.RateAppModal })))
 const RefreshPlanModal = lazy(() => import("@/app/refresh-plan-modal").then(m => ({ default: m.RefreshPlanModal })))
 
-interface SettingsClientProps {
-  initialProfileData: ProfileFormData
-  initialReferralStats: ReferralStats
-  initialStreakStats: StreakStats
-  initialMilestones: Milestone[]
-  initialNotificationPreferences: NotificationPreferences
-}
-
-export default function SettingsClient({
-  initialProfileData,
-  initialReferralStats,
-  initialStreakStats,
-  initialMilestones,
-  initialNotificationPreferences,
-}: SettingsClientProps) {
+export default function SettingsClient() {
   const router = useRouter()
   const { toast } = useToast()
+
+  // Get cached app data from global context
+  const { appData, isLoading: appDataLoading, refresh } = useAppData()
 
   // UI states
   const [useMetric, setUseMetric] = useState(false)
@@ -69,14 +59,88 @@ export default function SettingsClient({
   const [rateAppModalOpen, setRateAppModalOpen] = useState(false)
   const [isStartFreshModalOpen, setIsStartFreshModalOpen] = useState(false)
   const [isStartingFresh, setIsStartingFresh] = useState(false)
-
-  // Data states - initialized from server
-  const [profileData, setProfileData] = useState<ProfileFormData>(initialProfileData)
-  const [referralStats] = useState<ReferralStats>(initialReferralStats)
-  const [streakStats] = useState<StreakStats>(initialStreakStats)
-  const [milestones] = useState<Milestone[]>(initialMilestones)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default")
-  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(initialNotificationPreferences)
+
+  // Derive data from cached app data using useMemo
+  const profileData = useMemo<ProfileFormData>(() => {
+    if (!appData?.profile) {
+      return {
+        name: "",
+        age: "",
+        gender: "",
+        heightFeet: "",
+        heightInches: "",
+        weight: "",
+        goalWeight: "",
+        primaryGoal: "",
+        activityLevel: 3,
+        gymAccess: "",
+        selectedGym: "",
+        customEquipment: "",
+        allergies: [],
+        customRestrictions: [],
+        timezone: "America/New_York",
+      }
+    }
+    
+    const profile = appData.profile
+    return {
+      name: profile.name || "",
+      age: profile.age?.toString() || "",
+      gender: profile.gender || "",
+      heightFeet: profile.height_feet?.toString() || "",
+      heightInches: profile.height_inches?.toString() || "",
+      weight: profile.weight?.toString() || "",
+      goalWeight: profile.goal_weight?.toString() || "",
+      primaryGoal: profile.primary_goal || "",
+      activityLevel: profile.activity_level || 3,
+      gymAccess: profile.gym_access || "",
+      selectedGym: profile.selected_gym || "",
+      customEquipment: profile.custom_equipment || "",
+      allergies: profile.allergies || [],
+      customRestrictions: profile.custom_restrictions || [],
+      timezone: profile.timezone || "America/New_York",
+    }
+  }, [appData?.profile])
+
+  const referralStats = useMemo<ReferralStats>(() => {
+    return appData?.referralStats || {
+      referralCode: "",
+      creditsBalance: 0,
+      referralsCount: 0,
+      creditsEarned: 0,
+    }
+  }, [appData?.referralStats])
+
+  const streakStats = useMemo<StreakStats>(() => {
+    return appData?.streakStats || {
+      overallStreak: 0,
+      longestStreak: 0,
+      totalDaysActive: 0,
+      habitStreaks: [],
+      weeklyActivity: [],
+    }
+  }, [appData?.streakStats])
+
+  const milestones = useMemo<Milestone[]>(() => {
+    return appData?.milestones || []
+  }, [appData?.milestones])
+
+  const notificationPreferences = useMemo<NotificationPreferences>(() => {
+    return appData?.notificationPreferences || {
+      notificationsEnabled: true,
+      workoutReminders: true,
+      workoutReminderTime: "08:00",
+      mealReminders: true,
+      breakfastReminderTime: "08:00",
+      lunchReminderTime: "12:00",
+      dinnerReminderTime: "18:00",
+      progressUpdates: true,
+      streakWarnings: true,
+      achievementNotifications: true,
+      habitReminders: true,
+    }
+  }, [appData?.notificationPreferences])
 
   // Set notification permission on client only to avoid hydration mismatch
   useEffect(() => {
@@ -86,8 +150,9 @@ export default function SettingsClient({
   }, [])
 
   // Handlers
-  const handleProfileUpdate = (newProfile: ProfileFormData) => {
-    setProfileData(newProfile)
+  const handleProfileUpdate = async (newProfile: ProfileFormData) => {
+    // Profile was updated, refresh app data to reflect changes
+    await refresh()
     toast({
       title: "Profile Updated",
       description: "Your profile has been successfully updated.",
@@ -105,7 +170,6 @@ export default function SettingsClient({
 
   const handleTimezoneChange = async (newTimezone: string) => {
     const updatedProfile = { ...profileData, timezone: newTimezone }
-    setProfileData(updatedProfile)
 
     const result = await updateProfile(updatedProfile)
     if (result.error) {
@@ -115,6 +179,8 @@ export default function SettingsClient({
         variant: "destructive",
       })
     } else {
+      // Refresh app data to get updated profile
+      await refresh()
       toast({
         title: "Timezone Updated",
         description: "Your timezone has been saved. Habits will reset at midnight in your local time.",
@@ -142,7 +208,7 @@ export default function SettingsClient({
         }
       }
       await updateNotificationPreferences({ notificationsEnabled: true })
-      setNotificationPreferences({ ...notificationPreferences, notificationsEnabled: true })
+      await refresh()
     } else {
       toast({
         title: "Permission Denied",
@@ -153,9 +219,8 @@ export default function SettingsClient({
   }
 
   const handleNotificationToggle = async (key: string, value: boolean) => {
-    const updated = { ...notificationPreferences, [key]: value }
-    setNotificationPreferences(updated as NotificationPreferences)
     await updateNotificationPreferences({ [key]: value } as Partial<NotificationPreferences>)
+    await refresh()
     toast({
       title: "Preferences Updated",
       description: "Your notification settings have been saved",
@@ -163,9 +228,8 @@ export default function SettingsClient({
   }
 
   const handleTimeChange = async (key: string, value: string) => {
-    const updated = { ...notificationPreferences, [key]: value }
-    setNotificationPreferences(updated as NotificationPreferences)
     await updateNotificationPreferences({ [key]: value } as Partial<NotificationPreferences>)
+    await refresh()
   }
 
   const handleExportData = async () => {
@@ -312,6 +376,18 @@ export default function SettingsClient({
         // User cancelled
       }
     }
+  }
+
+  // Show loading state while app data is being fetched
+  if (appDataLoading && !appData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+          <p className="text-white/70">Loading settings...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

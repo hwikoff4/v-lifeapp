@@ -1,11 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "jsr:@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ALLOWED_ORIGIN = Deno.env.get("APP_ORIGIN") || Deno.env.get("NEXT_PUBLIC_APP_URL") || "*"
+const corsHeaders = () => ({
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-}
+  Vary: "Origin",
+})
 
 // ============================================================================
 // Types
@@ -483,7 +485,7 @@ Important:
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders() })
   }
   
   try {
@@ -492,7 +494,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
       )
     }
     
@@ -507,7 +509,7 @@ Deno.serve(async (req) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
       )
     }
     
@@ -517,7 +519,7 @@ Deno.serve(async (req) => {
       console.error("[AI-Planner] OPENAI_API_KEY not configured in Supabase secrets")
       return new Response(
         JSON.stringify({ error: "AI service not configured" }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 503, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
       )
     }
     
@@ -543,13 +545,13 @@ Deno.serve(async (req) => {
       default:
         return new Response(
           JSON.stringify({ error: "Invalid request type" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
         )
     }
     
     return new Response(
       JSON.stringify({ success: true, data: result }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
     )
     
   } catch (error) {
@@ -559,7 +561,7 @@ Deno.serve(async (req) => {
         error: "Failed to generate plan", 
         details: error instanceof Error ? error.message : "Unknown error" 
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
     )
   }
 })

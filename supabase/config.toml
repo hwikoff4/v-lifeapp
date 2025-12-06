@@ -9,3 +9,23 @@ entrypoint = "./functions/vbot/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/vbot/*.html" ]
+
+[functions.ai-planner]
+enabled = true
+verify_jwt = true
+import_map = "./functions/ai-planner/deno.json"
+
+[functions.daily-insight]
+enabled = true
+verify_jwt = true
+import_map = "./functions/daily-insight/deno.json"
+
+[functions.populate-habit-embeddings]
+enabled = true
+verify_jwt = true
+import_map = "./functions/populate-habit-embeddings/deno.json"
+
+[functions.vitalflow-daily-habits]
+enabled = true
+verify_jwt = true
+import_map = "./functions/vitalflow-daily-habits/deno.json"

@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { NavigationLoading } from "@/components/navigation-loading"
+import { AppDataProvider } from "@/lib/contexts/app-data-context"
 
 export function Providers({
   children,
@@ -62,8 +63,10 @@ export function Providers({
 
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-      <NavigationLoading />
-      {children}
+      <AppDataProvider>
+        <NavigationLoading />
+        {children}
+      </AppDataProvider>
     </ThemeProvider>
   )
 }

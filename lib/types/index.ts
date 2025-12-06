@@ -360,8 +360,14 @@ export interface VBotMessage {
 export interface Supplement {
   id: string
   name: string
+  category?: string | null
   description: string | null
-  dosage: string | null
+  benefits?: string[] | null
+  recommended_dosage?: string | null
+  recommended_time?: string | null
+  featured?: boolean
+  product_url?: string | null
+  created_at?: string
 }
 
 export interface SupplementLog {
@@ -372,4 +378,45 @@ export interface SupplementLog {
   logged_at: string
   supplements?: Supplement
 }
+
+// Daily Insights Types
+export interface DailyInsight {
+  id: string
+  user_id: string
+  local_date: string
+  timezone: string
+  insight: string
+  generated_at: string
+  meta?: Record<string, unknown>
+  created_at: string
+}
+
+export interface DailyInsightResult {
+  insight: string | null
+  error: string | null
+}
+
+// User Dashboard Snapshot for AI generation
+export interface UserDashboardSnapshot {
+  userId: string
+  userName: string | null
+  progress: number
+  habits: Array<{
+    id: string
+    name: string
+    category: string
+    frequency: string
+    currentStreak: number
+    bestStreak: number
+    completed: boolean
+  }>
+  totalHabits: number
+  completedToday: number
+  avgWeeklyProgress: number
+  primaryGoal: string | null
+  activityLevel: string | null
+}
+
+// Export app-data types for global context
+export type { AppData, AppDataUpdate, UseAppDataReturn } from './app-data'
 

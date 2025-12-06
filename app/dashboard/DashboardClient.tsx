@@ -1,21 +1,25 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { ArrowRight, Zap, CheckCircle, User, Settings, Edit2, Sparkles, Target } from "lucide-react"
+import { ArrowRight, Zap, User, Settings, Sparkles, Target } from "lucide-react"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { CircularProgress } from "@/components/ui/circular-progress"
 import { AmbientBackground } from "@/components/ambient-background"
-import { useState, useCallback, lazy, Suspense } from "react"
+import { VitalFlowDailyHabits } from "@/components/vitalflow-daily-habits"
+import { useState, lazy, Suspense, useEffect, useMemo, memo } from "react"
 import { motion } from "framer-motion"
-import { toggleHabitCompletion, getWeeklyProgress, getUserHabits } from "@/lib/actions/habits"
+import { getDailyInsight } from "@/lib/actions/daily-insights"
+import { shouldPromptWeeklyReflection } from "@/lib/actions/weekly-reflections"
 import { useToast } from "@/hooks/use-toast"
-import type { HabitWithStatus, ProfileFormData } from "@/lib/types"
+import { useTimezoneSync } from "@/lib/hooks/use-timezone"
+import { useAppData } from "@/lib/contexts/app-data-context"
+import type { ProfileFormData } from "@/lib/types"
 
 // Lazy load modals - they're only needed when opened
 const UpdateProfileModal = lazy(() => import("@/app/update-profile-modal").then(m => ({ default: m.UpdateProfileModal })))
-const ManageHabitsModal = lazy(() => import("@/app/manage-habits-modal").then(m => ({ default: m.ManageHabitsModal })))
+const WeeklyReflectionModal = lazy(() => import("@/app/weekly-reflection-modal").then(m => ({ default: m.WeeklyReflectionModal })))
 
 // Animation variants for staggered children
 const containerVariants = {
@@ -38,112 +42,134 @@ const itemVariants = {
   },
 }
 
-interface DashboardClientProps {
-  initialUserName: string
-  initialProgress: number
-  initialHabits: HabitWithStatus[]
-  initialProfileData: ProfileFormData
-}
-
-export default function DashboardClient({
-  initialUserName,
-  initialProgress,
-  initialHabits,
-  initialProfileData,
-}: DashboardClientProps) {
+function DashboardClient() {
   const router = useRouter()
   const { toast } = useToast()
   
+  // Get cached app data from global context
+  const { appData, isLoading: appDataLoading, refresh } = useAppData()
+  
+  // Sync user's browser timezone with profile
+  useTimezoneSync()
+  
   // UI states
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
-  const [isManageHabitsModalOpen, setIsManageHabitsModalOpen] = useState(false)
+  const [isWeeklyReflectionModalOpen, setIsWeeklyReflectionModalOpen] = useState(false)
   
-  // Data states - initialized from server
-  const [userName, setUserName] = useState(initialUserName)
-  const [progress, setProgress] = useState(initialProgress)
-  const [habits, setHabits] = useState<HabitWithStatus[]>(initialHabits)
-  const [profileData, setProfileData] = useState<ProfileFormData>(initialProfileData)
+  // AI Insight state
+  const [dailyInsight, setDailyInsight] = useState<string | null>(null)
+  const [insightLoading, setInsightLoading] = useState(true)
+  
+  // Derive user data from cached app data
+  const userName = useMemo(() => {
+    if (!appData?.profile?.name) return "there"
+    return appData.profile.name.split(" ")[0]
+  }, [appData?.profile?.name])
+  
+  const progress = useMemo(() => {
+    return appData?.weeklyProgress ?? 0
+  }, [appData?.weeklyProgress])
+  
+  const profileData = useMemo<ProfileFormData>(() => {
+    if (!appData?.profile) {
+      return {
+        name: "",
+        age: "",
+        gender: "",
+        heightFeet: "",
+        heightInches: "",
+        weight: "",
+        goalWeight: "",
+        primaryGoal: "",
+        activityLevel: 3,
+        gymAccess: "",
+        selectedGym: "",
+        customEquipment: "",
+        allergies: [],
+        customRestrictions: [],
+        timezone: "America/New_York",
+      }
+    }
+    
+    const profile = appData.profile
+    return {
+      name: profile.name || "",
+      age: profile.age?.toString() || "",
+      gender: profile.gender || "",
+      heightFeet: profile.height_feet?.toString() || "",
+      heightInches: profile.height_inches?.toString() || "",
+      weight: profile.weight?.toString() || "",
+      goalWeight: profile.goal_weight?.toString() || "",
+      primaryGoal: profile.primary_goal || "",
+      activityLevel: profile.activity_level || 3,
+      gymAccess: profile.gym_access || "",
+      selectedGym: profile.selected_gym || "",
+      customEquipment: profile.custom_equipment || "",
+      allergies: profile.allergies || [],
+      customRestrictions: profile.custom_restrictions || [],
+      timezone: profile.timezone || "America/New_York",
+    }
+  }, [appData?.profile])
 
-  const handleHabitToggle = async (habitId: string, currentlyCompleted: boolean) => {
-    // Optimistic update
-    setHabits((prevHabits) =>
-      prevHabits.map((habit) => 
-        habit.id === habitId ? { ...habit, completed: !currentlyCompleted } : habit
-      )
-    )
+  const handleProfileUpdate = async (newProfile: Partial<ProfileFormData>) => {
+    // Profile was updated, trigger a refresh of app data to reflect the changes
+    await refresh()
+  }
 
-    try {
-      const result = await toggleHabitCompletion(habitId, currentlyCompleted)
-
-      if (result.success) {
-        // Refresh progress after toggle
-        const progressResult = await getWeeklyProgress()
-        if (progressResult.progress !== undefined) {
-          setProgress(progressResult.progress)
+  // Load daily insight on mount
+  useEffect(() => {
+    async function loadDailyInsight() {
+      try {
+        setInsightLoading(true)
+        const result = await getDailyInsight()
+        if (result.insight) {
+          setDailyInsight(result.insight)
+        } else {
+          // Fallback if no insight returned
+          setDailyInsight("Keep pushing forward! Every small step counts toward your goals.")
         }
-        
-        toast({
-          title: currentlyCompleted ? "Habit unchecked" : "Great job!",
-          description: currentlyCompleted ? "Keep going!" : "You completed a habit today!",
-        })
-      } else {
-        // Revert on failure
-        setHabits((prevHabits) =>
-          prevHabits.map((habit) => 
-            habit.id === habitId ? { ...habit, completed: currentlyCompleted } : habit
-          )
-        )
-        toast({
-          title: "Error",
-          description: result.error || "Failed to update habit",
-          variant: "destructive",
-        })
+      } catch (error) {
+        console.error("[Dashboard] Error loading daily insight:", error)
+        setDailyInsight("Start small and build momentum. You've got this!")
+      } finally {
+        setInsightLoading(false)
       }
-    } catch {
-      // Revert on error
-      setHabits((prevHabits) =>
-        prevHabits.map((habit) => 
-          habit.id === habitId ? { ...habit, completed: currentlyCompleted } : habit
-        )
-      )
-      toast({
-        title: "Error",
-        description: "Failed to update habit",
-        variant: "destructive",
-      })
     }
-  }
 
-  const handleProfileUpdate = (newProfile: Partial<ProfileFormData>) => {
-    setProfileData((prev) => ({ ...prev, ...newProfile }))
-    if (newProfile.name) {
-      const firstName = newProfile.name.split(" ")[0]
-      setUserName(firstName)
-    }
-  }
+    loadDailyInsight()
+  }, [])
 
-  const reloadHabits = useCallback(async () => {
-    try {
-      // Fetch updated habits from server
-      const result = await getUserHabits()
-      if (result.habits) {
-        setHabits(result.habits)
-      } else if (result.error) {
-        toast({
-          title: "Error",
-          description: result.error || "Failed to refresh habits",
-          variant: "destructive",
-        })
+  // Check if we should prompt for weekly reflection
+  useEffect(() => {
+    async function checkWeeklyReflection() {
+      try {
+        const result = await shouldPromptWeeklyReflection()
+        if (result.shouldPrompt) {
+          // Delay the prompt slightly to avoid overwhelming the user on page load
+          setTimeout(() => {
+            setIsWeeklyReflectionModalOpen(true)
+          }, 3000)
+        }
+      } catch (error) {
+        console.error("[Dashboard] Error checking weekly reflection:", error)
       }
-    } catch (error) {
-      console.error("[Dashboard] Error reloading habits:", error)
-      toast({
-        title: "Error",
-        description: "Failed to refresh habits",
-        variant: "destructive",
-      })
     }
-  }, [toast])
+
+    checkWeeklyReflection()
+  }, [])
+
+  // Show loading state while app data is being fetched
+  if (appDataLoading && !appData) {
+    return (
+      <div className="min-h-screen pb-24 relative flex items-center justify-center">
+        <AmbientBackground />
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+          <p className="text-foreground/70">Loading your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen pb-24 relative">
@@ -204,72 +230,9 @@ export default function DashboardClient({
           </Card>
         </motion.div>
 
-        {/* Today's Habits */}
+        {/* VitalFlow Daily Habits - AI-powered suggestions */}
         <motion.div className="mb-6" variants={itemVariants}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
-              Today&apos;s Habits
-            </h2>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <ButtonGlow variant="outline-glow" size="sm" onClick={() => setIsManageHabitsModalOpen(true)}>
-                <Edit2 className="mr-1 h-3 w-3" />
-                Manage
-              </ButtonGlow>
-            </motion.div>
-          </div>
-          
-          {habits.length === 0 ? (
-            <Card className="glass-card">
-              <CardContent className="p-6 text-center">
-                <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-3">
-                  <Target className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground">No habits yet. Create some to get started!</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {habits.map((habit, index) => (
-                <motion.div
-                  key={habit.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                >
-                  <Card
-                    className={`cursor-pointer transition-all duration-300 ${
-                      habit.completed 
-                        ? "glass-card-accent" 
-                        : "glass-card hover:border-accent/30"
-                    }`}
-                    onClick={() => handleHabitToggle(habit.id, habit.completed)}
-                  >
-                    <CardContent className="flex items-center justify-between p-4">
-                      <div className="flex items-center">
-                        <motion.div
-                          className={`mr-3 flex h-7 w-7 items-center justify-center rounded-full transition-all duration-300 ${
-                            habit.completed 
-                              ? "bg-gradient-to-br from-accent to-accent-warm text-accent-foreground shadow-[0_0_15px_hsl(var(--accent)/0.5)]" 
-                              : "border-2 border-muted-foreground/30"
-                          }`}
-                          animate={habit.completed ? { scale: [1, 1.2, 1] } : {}}
-                          transition={{ duration: 0.3 }}
-                        >
-                          {habit.completed && <CheckCircle className="h-4 w-4" />}
-                        </motion.div>
-                        <span className={`font-medium transition-colors ${habit.completed ? "text-accent" : "text-foreground/80"}`}>
-                          {habit.name}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-          )}
+          <VitalFlowDailyHabits />
         </motion.div>
 
         {/* AI Tip of the Day */}
@@ -291,15 +254,16 @@ export default function DashboardClient({
                   <Zap className="h-5 w-5 text-accent-warm" />
                 </motion.div>
               </div>
-              <p className="text-foreground/70 leading-relaxed">
-                {progress > 75
-                  ? "You're crushing it! Consider adding a new challenge to keep progressing."
-                  : progress > 50
-                    ? "Great momentum! Focus on consistency to reach your next milestone."
-                    : progress > 25
-                      ? "You're building good habits! Keep up the consistency to see results."
-                      : "Start small and build momentum. Complete one habit today to boost your progress!"}
-              </p>
+              {insightLoading ? (
+                <div className="flex items-center gap-2 text-foreground/50">
+                  <div className="h-4 w-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                  <span className="text-sm">Generating your daily insight...</span>
+                </div>
+              ) : (
+                <p className="text-foreground/70 leading-relaxed">
+                  {dailyInsight || "Start small and build momentum. Complete one habit today to boost your progress!"}
+                </p>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -327,17 +291,18 @@ export default function DashboardClient({
           />
         </Suspense>
       )}
-      {isManageHabitsModalOpen && (
+      {isWeeklyReflectionModalOpen && (
         <Suspense fallback={null}>
-          <ManageHabitsModal
-            isOpen={isManageHabitsModalOpen}
-            onClose={() => setIsManageHabitsModalOpen(false)}
-            habits={habits}
-            onHabitsChange={reloadHabits}
+          <WeeklyReflectionModal
+            isOpen={isWeeklyReflectionModalOpen}
+            onClose={() => setIsWeeklyReflectionModalOpen(false)}
           />
         </Suspense>
       )}
     </div>
   )
 }
+
+// Export memoized component to prevent unnecessary re-renders
+export default memo(DashboardClient)
 

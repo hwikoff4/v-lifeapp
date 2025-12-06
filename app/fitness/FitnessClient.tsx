@@ -7,6 +7,7 @@ import { Settings, Target, Dumbbell, Calendar, ArrowRight, Sparkles, Zap, Clock 
 import { BottomNav } from "@/components/bottom-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { ButtonGlow } from "@/components/ui/button-glow"
+import { useAppData } from "@/lib/contexts/app-data-context"
 import type { ActiveWorkoutPayload, WorkoutOverview } from "@/lib/actions/workouts"
 
 interface ProgrammingContext {
@@ -17,14 +18,20 @@ interface ProgrammingContext {
 }
 
 interface FitnessClientProps {
-  userName: string
   activeWorkout: ActiveWorkoutPayload | null
   overview: WorkoutOverview
   programmingContext: ProgrammingContext
 }
 
-export function FitnessClient({ userName, activeWorkout, overview, programmingContext }: FitnessClientProps) {
+export function FitnessClient({ activeWorkout, overview, programmingContext }: FitnessClientProps) {
   const router = useRouter()
+  
+  // Get user name from cached app data
+  const { appData } = useAppData()
+  const userName = useMemo(() => {
+    if (!appData?.profile?.name) return "there"
+    return appData.profile.name.split(" ")[0]
+  }, [appData?.profile?.name])
 
   const weeklyHighlights = useMemo(() => {
     const latestWeek = overview.weeklyWorkoutData.at(-1)
