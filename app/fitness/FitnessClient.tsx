@@ -55,6 +55,21 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
           </ButtonGlow>
         </div>
 
+        {/* AI Fitness Coach CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <ButtonGlow
+            variant="accent-glow"
+            className="w-full h-14 text-base font-semibold bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500"
+            onClick={() => router.push("/ai-coach")}
+          >
+            🏋️ Access AI Fitness Coach
+          </ButtonGlow>
+        </motion.div>
+
         {/* Today's Programming Context */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
