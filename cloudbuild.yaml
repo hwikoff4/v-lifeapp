@@ -56,6 +56,6 @@ substitutions:
   # Supabase values (baked into image)
   _NEXT_PUBLIC_SUPABASE_URL: 'https://xiezvibwxvsulfiooknp.supabase.co'
   _NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpZXp2aWJ3eHZzdWxmaW9va25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4NzU5MjcsImV4cCI6MjA3NzQ1MTkyN30.DIEEkCqaznYNJbIxstDWgdzFxIelCp5fxjI6Ka885pA'
-  _NEXT_PUBLIC_APP_URL: ''  # Set after first deploy to your Cloud Run URL
+  _NEXT_PUBLIC_APP_URL: 'https://v-life-placeholder.run.app'  # Placeholder - update after first deploy with actual Cloud Run URL
 
 timeout: '1800s'
