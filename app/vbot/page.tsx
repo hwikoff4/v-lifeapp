@@ -385,6 +385,9 @@ export default function VBotPage() {
                 <p className="text-xs text-white/50">
                   {conversationId ? "Continuing conversation" : "Your AI Fitness Coach"}
                 </p>
+                <p className="text-[10px] text-white/30 mt-1">
+                  Not medical advice. Consult your physician before starting any fitness program.
+                </p>
               </div>
             </div>
             <ButtonGlow
