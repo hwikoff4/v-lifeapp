@@ -453,6 +453,7 @@ export function NutritionClient({
         <VitalFlowSupplementModal
           isOpen={isVitalFlowModalOpen}
           onClose={() => setIsVitalFlowModalOpen(false)}
+          purchaseUrl="https://vitalflowofficial.com/"
         />
       </div>
 
