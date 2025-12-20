@@ -372,7 +372,7 @@ gcloud run deploy v-life \
 - Supabase values baked into Docker image
 - Standalone Next.js build (no Node.js required)
 - Auto-scales with traffic, scales to 0 when idle
-- See `DEPLOYMENT_CLOUD_RUN.md` for detailed steps
+- See `docs/DEPLOYMENT_CLOUD_RUN.md` for detailed steps
 
 ### Local Docker Testing
 
@@ -457,12 +457,20 @@ const result = await withRetry(() => someAsyncOperation(), {
 
 ## Documentation Files
 
-- **QUICK_START.md** - 5-minute setup for daily insights feature
-- **DEPLOYMENT_CLOUD_RUN.md** - Google Cloud Run deployment guide
-- **DEPLOYMENT_CHECKLIST.md** - Pre-launch verification steps
-- **DAILY_INSIGHTS_IMPLEMENTATION.md** - AI insights technical details
-- **IMPLEMENTATION_SUMMARY.md** - Feature implementation overview
-- **PERFORMANCE_OPTIMIZATION_SUMMARY.md** - Performance metrics and optimizations
+All documentation files are located in the `docs/` folder:
+
+- **docs/QUICK_START.md** - 5-minute setup for daily insights feature
+- **docs/DEPLOYMENT_CLOUD_RUN.md** - Google Cloud Run deployment guide
+- **docs/DEPLOYMENT_CHECKLIST.md** - Pre-launch verification steps
+- **docs/DAILY_INSIGHTS_IMPLEMENTATION.md** - AI insights technical details
+- **docs/IMPLEMENTATION_SUMMARY.md** - Feature implementation overview
+- **docs/PERFORMANCE_OPTIMIZATION_SUMMARY.md** - Performance metrics and optimizations
+- **docs/CLOUD_BUILD_SETUP.md** - Google Cloud Build setup
+- **docs/VITALFLOW_DEPLOYMENT.md** - VitalFlow deployment guide
+- **docs/VITALFLOW_IMPLEMENTATION_SUMMARY.md** - VitalFlow feature overview
+- **docs/VITALFLOW_QUICKSTART.md** - VitalFlow quick start guide
+- **docs/SCHEMA_COMPARISON.md** - Database schema comparison
+- **docs/SCHEMA_DIFFERENCES.md** - Database schema differences
 
 ## Recent Changes & Context
 
