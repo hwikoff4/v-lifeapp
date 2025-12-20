@@ -72,12 +72,15 @@ const skipReasons = [
 
 interface VitalFlowDailyHabitsProps {
   className?: string
+  /** Initial suggestions from app data (avoids separate fetch) */
+  initialSuggestions?: VitalFlowSuggestion[]
 }
 
-export function VitalFlowDailyHabits({ className = "" }: VitalFlowDailyHabitsProps) {
+export function VitalFlowDailyHabits({ className = "", initialSuggestions }: VitalFlowDailyHabitsProps) {
   const { toast } = useToast()
-  const [suggestions, setSuggestions] = useState<VitalFlowSuggestion[]>([])
-  const [loading, setLoading] = useState(true)
+  const [suggestions, setSuggestions] = useState<VitalFlowSuggestion[]>(initialSuggestions || [])
+  // Only show loading if we don't have initial data
+  const [loading, setLoading] = useState(!initialSuggestions || initialSuggestions.length === 0)
   const [generating, setGenerating] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(true)
@@ -90,10 +93,12 @@ export function VitalFlowDailyHabits({ className = "" }: VitalFlowDailyHabitsPro
   const [customEnergy, setCustomEnergy] = useState(0)
   const [creatingCustom, setCreatingCustom] = useState(false)
 
-  // Load suggestions on mount
+  // Only load suggestions if we don't have initial data
   useEffect(() => {
-    loadSuggestions()
-  }, [])
+    if (!initialSuggestions || initialSuggestions.length === 0) {
+      loadSuggestions()
+    }
+  }, [initialSuggestions])
 
   const loadSuggestions = async () => {
     setLoading(true)

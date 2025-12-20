@@ -15,6 +15,32 @@ import type {
 } from "./index"
 
 /**
+ * VitalFlow suggestion for daily habits (simplified for AppData)
+ */
+export interface VitalFlowSuggestionData {
+  id: string
+  user_id: string
+  date: string
+  habit_template_id?: string
+  knowledge_id?: string
+  title: string
+  reason: string
+  category: 'movement' | 'nutrition' | 'sleep' | 'mindset' | 'recovery' | 'hydration'
+  source: 'ai' | 'template' | 'manual'
+  energy_delta_kcal: number
+  time_minutes: number
+  tags: string[]
+  rank: number
+  status: 'suggested' | 'accepted' | 'skipped' | 'completed' | 'failed'
+  skip_reason?: string
+  completion_ratio: number
+  completed_at?: string
+  metadata: unknown
+  created_at: string
+  updated_at: string
+}
+
+/**
  * Core application data loaded at bootstrap.
  * This data is:
  * - Fetched once when the user starts using the app
@@ -51,6 +77,15 @@ export interface AppData {
 
   /** User notification preferences */
   notificationPreferences: NotificationPreferences
+
+  /** AI-generated daily insight message */
+  dailyInsight: string | null
+
+  /** Whether to prompt for weekly reflection */
+  shouldPromptWeeklyReflection: boolean
+
+  /** VitalFlow daily habit suggestions */
+  vitalFlowSuggestions: VitalFlowSuggestionData[]
 
   /** Timestamp of when this data was last fetched (ISO string) */
   fetchedAt: string

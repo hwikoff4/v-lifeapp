@@ -1,24 +1,39 @@
 /**
- * Bootstrap API Endpoint
+ * Bootstrap API Endpoint - OPTIMIZED
  * 
  * Fetches all core application data in a single parallel request.
- * This eliminates the need for pages to individually query the database
- * for common data like profile, habits, progress, etc.
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Single auth check (was 9+ before)
+ * - Single profile query shared across all data types
+ * - Parallel database queries with shared context
+ * - Batched dashboard data (daily insight, weekly reflection, vitalflow)
  */
 
 import { NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/supabase/server"
-import { getProfile } from "@/lib/actions/profile"
-import { getWeeklyProgress, getUserHabits } from "@/lib/actions/habits"
-import { getSubscription } from "@/lib/actions/subscription"
-import { getReferralStats } from "@/lib/actions/referrals"
-import { getStreakStats, getMilestones } from "@/lib/actions/streaks"
-import { getNotificationPreferences } from "@/lib/actions/notifications"
+import { createClient, getAuthUser } from "@/lib/supabase/server"
+import {
+  getProfileInternal,
+  getUserHabitsInternal,
+  getWeeklyProgressInternal,
+  getSubscriptionInternal,
+  getReferralStatsInternal,
+  getStreakStatsInternal,
+  getMilestonesInternal,
+  getNotificationPreferencesInternal,
+  getDailyInsightInternal,
+  shouldPromptWeeklyReflectionInternal,
+  getVitalFlowSuggestionsInternal,
+} from "@/lib/actions/app-data-internal"
 import type { AppData } from "@/lib/types/app-data"
 
+const DEFAULT_TIMEZONE = "America/New_York"
+
 export async function GET() {
+  const startTime = performance.now()
+  
   try {
-    // Auth check
+    // SINGLE auth check for the entire request
     const { user, error: authError } = await getAuthUser()
     if (authError || !user) {
       return NextResponse.json(
@@ -27,32 +42,48 @@ export async function GET() {
       )
     }
 
-    // Fetch all bootstrap data in parallel
+    const supabase = await createClient()
+    const userId = user.id
+
+    // Step 1: Get profile first to extract timezone (needed by other queries)
+    const profile = await getProfileInternal(userId, supabase)
+    const timezone = profile?.timezone || DEFAULT_TIMEZONE
+
+    // Get session for edge function calls
+    const { data: { session } } = await supabase.auth.getSession()
+    const accessToken = session?.access_token || ""
+
+    // Step 2: Fetch ALL data in parallel using internal functions
+    // These don't re-check auth - they use the userId and supabase we pass
     const [
-      profileResult,
-      progressResult,
-      habitsResult,
+      habits,
+      weeklyProgress,
       subscription,
-      referralResult,
-      streakResult,
-      milestonesResult,
-      notifResult,
+      referralStats,
+      streakStats,
+      milestones,
+      notificationPreferences,
+      dailyInsight,
+      shouldPromptWeeklyReflection,
+      vitalFlowSuggestions,
     ] = await Promise.all([
-      getProfile(),
-      getWeeklyProgress(),
-      getUserHabits(),
-      getSubscription(),
-      getReferralStats(),
-      getStreakStats(),
-      getMilestones(),
-      getNotificationPreferences(),
+      getUserHabitsInternal(userId, timezone, supabase),
+      getWeeklyProgressInternal(userId, timezone, supabase),
+      getSubscriptionInternal(userId, supabase),
+      getReferralStatsInternal(userId, supabase),
+      getStreakStatsInternal(userId, timezone, supabase),
+      getMilestonesInternal(userId, supabase),
+      getNotificationPreferencesInternal(userId, supabase),
+      getDailyInsightInternal(userId, timezone, supabase, accessToken),
+      shouldPromptWeeklyReflectionInternal(userId, supabase),
+      getVitalFlowSuggestionsInternal(userId, supabase),
     ])
 
     // Build the AppData payload
     const appData: AppData = {
-      profile: profileResult.profile || null,
-      weeklyProgress: progressResult.progress || 0,
-      habits: habitsResult.habits || [],
+      profile: profile,
+      weeklyProgress: weeklyProgress,
+      habits: habits,
       subscription: subscription
         ? {
             plan: subscription.plan,
@@ -62,35 +93,18 @@ export async function GET() {
             nextBillingDate: subscription.next_billing_date,
           }
         : null,
-      referralStats: referralResult.stats || {
-        referralCode: "",
-        creditsBalance: 0,
-        referralsCount: 0,
-        creditsEarned: 0,
-      },
-      streakStats: streakResult.stats || {
-        overallStreak: 0,
-        longestStreak: 0,
-        totalDaysActive: 0,
-        habitStreaks: [],
-        weeklyActivity: [],
-      },
-      milestones: milestonesResult.milestones || [],
-      notificationPreferences: notifResult.preferences || {
-        notificationsEnabled: true,
-        workoutReminders: true,
-        workoutReminderTime: "08:00",
-        mealReminders: true,
-        breakfastReminderTime: "08:00",
-        lunchReminderTime: "12:00",
-        dinnerReminderTime: "18:00",
-        progressUpdates: true,
-        streakWarnings: true,
-        achievementNotifications: true,
-        habitReminders: true,
-      },
+      referralStats: referralStats,
+      streakStats: streakStats,
+      milestones: milestones,
+      notificationPreferences: notificationPreferences,
+      dailyInsight: dailyInsight,
+      shouldPromptWeeklyReflection: shouldPromptWeeklyReflection,
+      vitalFlowSuggestions: vitalFlowSuggestions,
       fetchedAt: new Date().toISOString(),
     }
+
+    const duration = Math.round(performance.now() - startTime)
+    console.log(`[AppData API] ✅ Fetched all data in ${duration}ms (optimized)`)
 
     return NextResponse.json(appData)
   } catch (error) {

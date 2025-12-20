@@ -31,20 +31,8 @@ export async function getProfile(): Promise<ProfileResult> {
   }
 
   try {
-    // Bypass cache temporarily to debug - fetch directly from database
-    const supabase = await createClient()
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (error) {
-      console.error("[getProfile] Database error:", error)
-      throw error
-    }
-
-    console.log("[getProfile] Fetched profile for user", user.id, ":", profile)
+    // Use cached profile for better performance
+    const profile = await getCachedProfile(user.id)
     return { profile: profile || null }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to load profile"

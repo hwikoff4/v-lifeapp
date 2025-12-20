@@ -1,10 +1,14 @@
 "use client"
 
 /**
- * AppDataProvider - Global Data Context
+ * AppDataProvider - Global Data Context (OPTIMIZED)
  * 
  * Provides cached application data to all components, eliminating
  * redundant database queries on every navigation.
+ * 
+ * PERFORMANCE:
+ * - No client-side auth check (server handles auth, returns 401 if needed)
+ * - Single fetch for all data including daily insight, vitalflow, etc.
  * 
  * Features:
  * - Loads data once at app start
@@ -15,7 +19,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react"
 import type { AppData, UseAppDataReturn } from "@/lib/types/app-data"
-import { createClient } from "@/lib/supabase/client"
 
 const AppDataContext = createContext<UseAppDataReturn | null>(null)
 
@@ -62,28 +65,14 @@ export function AppDataProvider({ children }: AppDataProviderProps) {
     const startTime = performance.now()
 
     try {
-      // Check if user is authenticated
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        // User not authenticated, clear data
-        setAppData(null)
-        setError("Not authenticated")
-        setIsLoading(false)
-        setIsRefreshing(false)
-        fetchInProgressRef.current = false
-        console.log("[AppDataProvider] ❌ Not authenticated")
-        return
-      }
-
+      // Fetch app data - server handles auth and returns 401 if needed
+      // No client-side auth check needed (eliminates redundant Supabase call)
       const response = await fetch("/api/app-data", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
-        // Prevent caching to ensure fresh data
-        cache: "no-store",
+        credentials: "include", // Include cookies for auth
       })
 
       if (!response.ok) {

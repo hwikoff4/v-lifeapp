@@ -10,9 +10,6 @@ import { AmbientBackground } from "@/components/ambient-background"
 import { VitalFlowDailyHabits } from "@/components/vitalflow-daily-habits"
 import { useState, lazy, Suspense, useEffect, useMemo, memo } from "react"
 import { motion } from "framer-motion"
-import { getDailyInsight } from "@/lib/actions/daily-insights"
-import { shouldPromptWeeklyReflection } from "@/lib/actions/weekly-reflections"
-import { useToast } from "@/hooks/use-toast"
 import { useTimezoneSync } from "@/lib/hooks/use-timezone"
 import { useAppData } from "@/lib/contexts/app-data-context"
 import type { ProfileFormData } from "@/lib/types"
@@ -44,9 +41,8 @@ const itemVariants = {
 
 function DashboardClient() {
   const router = useRouter()
-  const { toast } = useToast()
   
-  // Get cached app data from global context
+  // Get cached app data from global context (includes daily insight, vitalflow, etc.)
   const { appData, isLoading: appDataLoading, refresh } = useAppData()
   
   // Sync user's browser timezone with profile
@@ -55,10 +51,6 @@ function DashboardClient() {
   // UI states
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [isWeeklyReflectionModalOpen, setIsWeeklyReflectionModalOpen] = useState(false)
-  
-  // AI Insight state
-  const [dailyInsight, setDailyInsight] = useState<string | null>(null)
-  const [insightLoading, setInsightLoading] = useState(true)
   
   // Derive user data from cached app data
   const userName = useMemo(() => {
@@ -116,47 +108,19 @@ function DashboardClient() {
     await refresh()
   }
 
-  // Load daily insight on mount
+  // Daily insight from batched app data (no separate fetch needed)
+  const dailyInsight = appData?.dailyInsight || "Start small and build momentum. Complete one habit today!"
+
+  // Check if we should prompt for weekly reflection (from batched app data)
   useEffect(() => {
-    async function loadDailyInsight() {
-      try {
-        setInsightLoading(true)
-        const result = await getDailyInsight()
-        if (result.insight) {
-          setDailyInsight(result.insight)
-        } else {
-          // Fallback if no insight returned
-          setDailyInsight("Keep pushing forward! Every small step counts toward your goals.")
-        }
-      } catch (error) {
-        console.error("[Dashboard] Error loading daily insight:", error)
-        setDailyInsight("Start small and build momentum. You've got this!")
-      } finally {
-        setInsightLoading(false)
-      }
+    if (appData?.shouldPromptWeeklyReflection) {
+      // Delay the prompt slightly to avoid overwhelming the user on page load
+      const timer = setTimeout(() => {
+        setIsWeeklyReflectionModalOpen(true)
+      }, 3000)
+      return () => clearTimeout(timer)
     }
-
-    loadDailyInsight()
-  }, [])
-
-  // Check if we should prompt for weekly reflection
-  useEffect(() => {
-    async function checkWeeklyReflection() {
-      try {
-        const result = await shouldPromptWeeklyReflection()
-        if (result.shouldPrompt) {
-          // Delay the prompt slightly to avoid overwhelming the user on page load
-          setTimeout(() => {
-            setIsWeeklyReflectionModalOpen(true)
-          }, 3000)
-        }
-      } catch (error) {
-        console.error("[Dashboard] Error checking weekly reflection:", error)
-      }
-    }
-
-    checkWeeklyReflection()
-  }, [])
+  }, [appData?.shouldPromptWeeklyReflection])
 
   // Show loading state while app data is being fetched
   if (appDataLoading && !appData) {
@@ -230,9 +194,9 @@ function DashboardClient() {
           </Card>
         </motion.div>
 
-        {/* VitalFlow Daily Habits - AI-powered suggestions */}
+        {/* VitalFlow Daily Habits - AI-powered suggestions (with batched initial data) */}
         <motion.div className="mb-6" variants={itemVariants}>
-          <VitalFlowDailyHabits />
+          <VitalFlowDailyHabits initialSuggestions={appData?.vitalFlowSuggestions} />
         </motion.div>
 
         {/* AI Tip of the Day */}
@@ -254,16 +218,9 @@ function DashboardClient() {
                   <Zap className="h-5 w-5 text-accent-warm" />
                 </motion.div>
               </div>
-              {insightLoading ? (
-                <div className="flex items-center gap-2 text-foreground/50">
-                  <div className="h-4 w-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-                  <span className="text-sm">Generating your daily insight...</span>
-                </div>
-              ) : (
-                <p className="text-foreground/70 leading-relaxed">
-                  {dailyInsight || "Start small and build momentum. Complete one habit today to boost your progress!"}
-                </p>
-              )}
+              <p className="text-foreground/70 leading-relaxed">
+                {dailyInsight}
+              </p>
             </CardContent>
           </Card>
         </motion.div>
