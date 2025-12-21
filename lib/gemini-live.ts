@@ -28,7 +28,8 @@ export class GeminiLiveClient {
 
   constructor(config: GeminiLiveConfig, callbacks: GeminiLiveCallbacks) {
     this.config = {
-      model: "gemini-2.0-flash-live-001",
+      // Gemini Live API model for bidirectional streaming
+      model: "gemini-2.0-flash-live-preview-04-09",
       ...config,
     }
     this.callbacks = callbacks
@@ -91,6 +92,9 @@ export class GeminiLiveClient {
             }
           ]
         },
+        // Enable transcription for both input and output audio
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
       },
     }
 

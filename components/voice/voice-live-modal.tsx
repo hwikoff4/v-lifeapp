@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useCallback } from "react"
+import { useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Mic, MicOff, Loader2, Volume2, Wifi, WifiOff } from "lucide-react"
+import { X, Mic, MicOff, Loader2, Volume2, Wifi, WifiOff, RefreshCw } from "lucide-react"
 import { useGeminiLive, type LiveVoiceState } from "@/hooks/use-gemini-live"
 import type { GeminiVoiceName } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -18,6 +18,8 @@ export function VoiceLiveModal({
   onClose,
   voice = "Kore",
 }: VoiceLiveModalProps) {
+  const hasTriedConnect = useRef(false)
+
   const {
     state,
     transcript,
@@ -35,19 +37,29 @@ Be conversational, encouraging, and supportive.
 Speak naturally as if having a real conversation.`,
   })
 
-  // Connect when modal opens
+  // Connect when modal opens (only once per open)
   useEffect(() => {
-    if (isOpen && state === 'disconnected') {
+    if (isOpen && state === 'disconnected' && !hasTriedConnect.current && !error) {
+      hasTriedConnect.current = true
       connect()
     }
-  }, [isOpen, state, connect])
+  }, [isOpen, state, connect, error])
 
-  // Disconnect when modal closes
+  // Reset connection attempt flag when modal closes
   useEffect(() => {
-    if (!isOpen && state !== 'disconnected') {
-      disconnect()
+    if (!isOpen) {
+      hasTriedConnect.current = false
+      if (state !== 'disconnected') {
+        disconnect()
+      }
     }
   }, [isOpen, state, disconnect])
+
+  // Manual retry connection
+  const handleRetry = useCallback(() => {
+    hasTriedConnect.current = false
+    connect()
+  }, [connect])
 
   const handleClose = useCallback(() => {
     stopListening()
@@ -264,8 +276,15 @@ Speak naturally as if having a real conversation.`,
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                   >
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 backdrop-blur-sm">
-                      <p className="text-sm leading-relaxed text-red-400">{error}</p>
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 backdrop-blur-sm">
+                      <p className="text-sm leading-relaxed text-red-400 mb-3">{error}</p>
+                      <button
+                        onClick={handleRetry}
+                        className="flex items-center gap-2 rounded-lg bg-red-500/20 px-4 py-2 text-sm text-red-300 transition-colors hover:bg-red-500/30"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Retry Connection
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -279,6 +298,8 @@ Speak naturally as if having a real conversation.`,
                 {state === 'listening' && "Speak naturally - I'm listening in real-time"}
                 {state === 'responding' && "I'm responding..."}
                 {state === 'connecting' && "Setting up voice connection..."}
+                {state === 'error' && "Connection failed - tap retry above"}
+                {state === 'disconnected' && error && "Connection failed"}
               </p>
               <p className="mt-2 text-xs text-white/30">
                 Real-time voice powered by Gemini Live API
