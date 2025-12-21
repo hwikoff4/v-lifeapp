@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Mic, MicOff, Loader2, X } from "lucide-react"
+import { Mic, Send, Loader2, X } from "lucide-react"
 import { useAudioRecorder } from "@/hooks/use-audio-recorder"
 import { cn } from "@/lib/utils"
 
@@ -90,7 +90,7 @@ export function VoiceChatButton({ onTranscript, disabled, className, size = "def
       return { title: "Processing...", subtitle: "Transcribing your message" }
     }
     if (isRecording) {
-      return { title: "Tap to send", subtitle: "Recording... tap when done" }
+      return { title: "Tap to send", subtitle: "Listening... tap button when done" }
     }
     return { title: "Tap to speak", subtitle: "I'll transcribe and respond with audio" }
   }
@@ -107,12 +107,12 @@ export function VoiceChatButton({ onTranscript, disabled, className, size = "def
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur-sm"
+              className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur-sm"
             >
               <motion.div
                 className="h-2 w-2 rounded-full bg-white"
-                animate={{ opacity: [1, 0.3, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
               />
               <span>{formatTime(recordingTime)}</span>
               <button
@@ -145,10 +145,10 @@ export function VoiceChatButton({ onTranscript, disabled, className, size = "def
           onClick={handleToggleRecording}
           disabled={disabled || isTranscribing}
           className={cn(
-            "flex items-center justify-center rounded-full transition-all",
+            "relative z-10 flex items-center justify-center rounded-full transition-all",
             size === "large" ? "h-16 w-16" : "h-12 w-12",
             isRecording
-              ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+              ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/30 hover:from-amber-400 hover:to-amber-500"
               : size === "large"
               ? "bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg shadow-green-500/30 hover:from-green-400 hover:to-green-500"
               : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white",
@@ -159,12 +159,7 @@ export function VoiceChatButton({ onTranscript, disabled, className, size = "def
           {isTranscribing ? (
             <Loader2 className={cn("animate-spin", size === "large" ? "h-7 w-7" : "h-5 w-5")} />
           ) : isRecording ? (
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
-              <MicOff className={cn(size === "large" ? "h-7 w-7" : "h-5 w-5")} />
-            </motion.div>
+            <Send className={cn(size === "large" ? "h-7 w-7" : "h-5 w-5")} />
           ) : (
             <Mic className={cn(size === "large" ? "h-7 w-7" : "h-5 w-5")} />
           )}
@@ -174,10 +169,10 @@ export function VoiceChatButton({ onTranscript, disabled, className, size = "def
         <AnimatePresence>
           {isRecording && (
             <motion.div
-              className="absolute inset-0 rounded-full border-2 border-red-500"
-              initial={{ scale: 1, opacity: 0.8 }}
-              animate={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 1.5, repeat: Infinity }}
+              className="pointer-events-none absolute inset-0 rounded-full border-2 border-amber-400"
+              initial={{ scale: 1, opacity: 0.6 }}
+              animate={{ scale: 1.4, opacity: 0 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
             />
           )}
         </AnimatePresence>
@@ -188,7 +183,7 @@ export function VoiceChatButton({ onTranscript, disabled, className, size = "def
         <div className="text-left">
           <p className={cn(
             "text-base font-semibold",
-            isRecording ? "text-red-400" : "text-white"
+            isRecording ? "text-amber-400" : "text-white"
           )}>
             {labelText.title}
           </p>
