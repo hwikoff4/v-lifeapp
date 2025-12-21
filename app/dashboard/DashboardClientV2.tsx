@@ -227,24 +227,20 @@ function DashboardClientV2() {
           />
         </motion.div>
 
-        {/* Streak Fire Ring & Power Stats Row */}
+        {/* Streak Fire Ring - Centered */}
         <motion.div className="mb-6" variants={itemVariants}>
-          <div className="flex items-center gap-6">
-            {/* Streak Ring */}
-            <div className="flex-shrink-0">
-              <StreakFireRing streakDays={streakDays} size="md" />
-            </div>
-            
-            {/* Power Stats - Vertical on mobile */}
-            <div className="flex-1">
-              <PowerStats
-                workoutStreak={powerStatsData.workoutStreak}
-                nutritionScore={powerStatsData.nutritionScore}
-                habitCompletion={powerStatsData.habitCompletion}
-                className="grid-cols-1 gap-2"
-              />
-            </div>
+          <div className="flex justify-center">
+            <StreakFireRing streakDays={streakDays} size="sm" />
           </div>
+        </motion.div>
+
+        {/* Power Stats - Horizontal Row */}
+        <motion.div className="mb-6" variants={itemVariants}>
+          <PowerStats
+            workoutStreak={powerStatsData.workoutStreak}
+            nutritionScore={powerStatsData.nutritionScore}
+            habitCompletion={powerStatsData.habitCompletion}
+          />
         </motion.div>
 
         {/* Daily Missions */}

@@ -88,30 +88,34 @@ export function StreakFireRing({ streakDays, className, size = "md" }: StreakFir
           }}
         />
 
-        {/* Main ring with gradient */}
-        <motion.div
-          className={cn(
-            sizeClass.ring,
-            "rounded-full p-1",
-            "bg-gradient-to-br",
-            intensity.ringColor
-          )}
-          animate={{
-            rotate: 360
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-        >
-          {/* Inner circle */}
-          <div className={cn(
-            "w-full h-full rounded-full",
-            "bg-gradient-to-br from-background to-background/90",
-            "flex items-center justify-center",
-            "border-2 border-background/50"
-          )}>
+        {/* Main ring with gradient - only the ring rotates, not the content */}
+        <div className={cn(sizeClass.ring, "relative")}>
+          {/* Rotating gradient ring */}
+          <motion.div
+            className={cn(
+              "absolute inset-0 rounded-full p-1",
+              "bg-gradient-to-br",
+              intensity.ringColor
+            )}
+            animate={{
+              rotate: 360
+            }}
+            transition={{
+              duration: 20,
+              repeat: Infinity,
+              ease: "linear"
+            }}
+          >
+            {/* Inner circle background (rotates with ring) */}
+            <div className={cn(
+              "w-full h-full rounded-full",
+              "bg-gradient-to-br from-background to-background/90",
+              "border-2 border-background/50"
+            )} />
+          </motion.div>
+
+          {/* Static content - positioned on top, does NOT rotate */}
+          <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <motion.span
                 className={cn(sizeClass.text, "font-black text-foreground block")}
@@ -124,10 +128,10 @@ export function StreakFireRing({ streakDays, className, size = "md" }: StreakFir
               <span className={cn(sizeClass.label, "text-muted-foreground")}>days</span>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Floating flame particles */}
-        {Array.from({ length: intensity.flames }).map((_, i) => (
+        {/* Floating flame particles - only show when streak > 0 */}
+        {streakDays > 0 && Array.from({ length: intensity.flames }).map((_, i) => (
           <motion.div
             key={i}
             className="absolute"

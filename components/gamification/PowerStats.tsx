@@ -105,7 +105,7 @@ function StatCard({ icon, label, value, suffix, current, previous, color, delay 
   )
 }
 
-export function PowerStats({ workoutStreak, nutritionScore, habitCompletion, className }: PowerStatsProps) {
+function PowerStats({ workoutStreak, nutritionScore, habitCompletion, className }: PowerStatsProps) {
   return (
     <div className={cn("grid grid-cols-3 gap-3", className)}>
       <StatCard
@@ -143,3 +143,5 @@ export function PowerStats({ workoutStreak, nutritionScore, habitCompletion, cla
     </div>
   )
 }
+
+export { PowerStats }
