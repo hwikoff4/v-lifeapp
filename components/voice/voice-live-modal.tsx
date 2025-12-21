@@ -40,7 +40,10 @@ Speak naturally as if having a real conversation.`,
   useEffect(() => {
     if (isOpen && state === 'disconnected' && !hasTriedConnect.current && !error) {
       hasTriedConnect.current = true
-      connect()
+      console.log("[VoiceLiveModal] Attempting to connect...")
+      connect().catch((err) => {
+        console.error("[VoiceLiveModal] Connection failed:", err)
+      })
     }
   }, [isOpen, state, connect, error])
 

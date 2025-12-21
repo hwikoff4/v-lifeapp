@@ -22,9 +22,11 @@ export class GeminiLiveClient {
   private config: GeminiLiveConfig
   private callbacks: GeminiLiveCallbacks
   private isConnected = false
+  private isSetupComplete = false
   private audioContext: AudioContext | null = null
   private audioQueue: Float32Array[] = []
   private isPlaying = false
+  private setupResolve: (() => void) | null = null
 
   constructor(config: GeminiLiveConfig, callbacks: GeminiLiveCallbacks) {
     this.config = {
@@ -39,18 +41,30 @@ export class GeminiLiveClient {
     return new Promise((resolve, reject) => {
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${this.config.apiKey}`
       
-      console.log("[GeminiLive] Connecting to WebSocket...")
+      const maskedKey = this.config.apiKey ? `${this.config.apiKey.slice(0, 8)}...${this.config.apiKey.slice(-4)}` : "MISSING"
+      console.log("[GeminiLive] Connecting to WebSocket with API key:", maskedKey)
       this.ws = new WebSocket(wsUrl)
+      this.setupResolve = resolve
+      
+      // Timeout if setup doesn't complete in 10 seconds
+      const setupTimeout = setTimeout(() => {
+        console.error("[GeminiLive] ❌ Setup timeout - no setupComplete received")
+        this.callbacks.onError(new Error("Connection timeout - setup not completed"))
+        reject(new Error("Setup timeout"))
+        this.disconnect()
+      }, 10000)
       
       this.ws.onopen = () => {
         console.log("[GeminiLive] WebSocket connected, sending setup...")
-        this.sendSetup()
         this.isConnected = true
-        this.callbacks.onConnectionChange(true)
-        resolve()
+        this.sendSetup()
+        // Store timeout to clear it when setup completes
+        ;(this as any).setupTimeout = setupTimeout
+        // Don't resolve or callback yet - wait for setupComplete message
       }
 
       this.ws.onmessage = (event) => {
+        console.log("[GeminiLive] 📩 Raw message received, type:", typeof event.data, "length:", event.data?.length || 0)
         this.handleMessage(event.data)
       }
 
@@ -76,6 +90,7 @@ export class GeminiLiveClient {
   private sendSetup(): void {
     if (!this.ws) return
 
+    // Simplified setup matching official docs format
     const setup = {
       setup: {
         model: `models/${this.config.model}`,
@@ -84,7 +99,7 @@ export class GeminiLiveClient {
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
-                voiceName: this.config.voice || "Kore",
+                voiceName: "Kore",  // Use default voice from docs
               },
             },
           },
@@ -93,17 +108,14 @@ export class GeminiLiveClient {
           parts: [
             {
               text: this.config.systemInstruction || 
-                "You are VBot, a helpful AI fitness coach. Keep responses brief and conversational - 1-2 sentences. Be encouraging and supportive."
+                "You are a helpful AI assistant. Keep responses brief."
             }
           ]
         },
-        // Enable transcription for both input and output audio
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
       },
     }
 
-    console.log("[GeminiLive] Sending setup:", JSON.stringify(setup).slice(0, 200))
+    console.log("[GeminiLive] Sending setup:", JSON.stringify(setup))
     this.ws.send(JSON.stringify(setup))
   }
 
@@ -111,11 +123,28 @@ export class GeminiLiveClient {
     try {
       if (typeof data === "string") {
         const message = JSON.parse(data)
-        console.log("[GeminiLive] 📨 Received message:", JSON.stringify(message).slice(0, 300))
+        console.log("[GeminiLive] 📨 Received message:", JSON.stringify(message).slice(0, 500))
+        
+        // Handle errors from server
+        if (message.error) {
+          console.error("[GeminiLive] ❌ Server error:", message.error)
+          this.callbacks.onError(new Error(message.error.message || "Server error"))
+          return
+        }
 
         // Handle setup complete
         if (message.setupComplete) {
-          console.log("[GeminiLive] ✅ Setup complete")
+          console.log("[GeminiLive] ✅ Setup complete - ready for audio!")
+          this.isSetupComplete = true
+          // Clear the setup timeout
+          if ((this as any).setupTimeout) {
+            clearTimeout((this as any).setupTimeout)
+          }
+          this.callbacks.onConnectionChange(true)
+          if (this.setupResolve) {
+            this.setupResolve()
+            this.setupResolve = null
+          }
           return
         }
 
@@ -185,9 +214,14 @@ export class GeminiLiveClient {
     return bytes.buffer
   }
 
+  private audioChunkCount = 0
+  private lastAudioLogTime = 0
+
   sendAudio(audioData: ArrayBuffer): void {
-    if (!this.ws || !this.isConnected) {
-      console.warn("[GeminiLive] Cannot send audio - not connected")
+    if (!this.ws || !this.isConnected || !this.isSetupComplete) {
+      if (!this.isSetupComplete) {
+        console.warn("[GeminiLive] Cannot send audio - setup not complete")
+      }
       return
     }
 
@@ -203,6 +237,14 @@ export class GeminiLiveClient {
           },
         ],
       },
+    }
+
+    this.audioChunkCount++
+    const now = Date.now()
+    // Log every 2 seconds to avoid spam
+    if (now - this.lastAudioLogTime > 2000) {
+      console.log(`[GeminiLive] 🎤 Sending audio chunk #${this.audioChunkCount}, size: ${audioData.byteLength} bytes`)
+      this.lastAudioLogTime = now
     }
 
     this.ws.send(JSON.stringify(message))
@@ -245,6 +287,8 @@ export class GeminiLiveClient {
       this.ws.close()
       this.ws = null
       this.isConnected = false
+      this.isSetupComplete = false
+      this.audioChunkCount = 0
     }
   }
 
