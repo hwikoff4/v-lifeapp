@@ -111,27 +111,48 @@ export class GeminiLiveClient {
     try {
       if (typeof data === "string") {
         const message = JSON.parse(data)
-        console.log("[GeminiLive] Received message:", Object.keys(message))
+        console.log("[GeminiLive] 📨 Received message:", JSON.stringify(message).slice(0, 300))
 
         // Handle setup complete
         if (message.setupComplete) {
-          console.log("[GeminiLive] Setup complete")
+          console.log("[GeminiLive] ✅ Setup complete")
           return
         }
 
         // Handle server content (audio/text response)
         if (message.serverContent) {
           const content = message.serverContent
+          console.log("[GeminiLive] 📦 Server content keys:", Object.keys(content))
+          
+          // Handle interruption (user spoke while model was responding)
+          if (content.interrupted) {
+            console.log("[GeminiLive] ⚠️ Interrupted by user")
+            return
+          }
+
+          // Handle input transcription (what the user said)
+          if (content.inputTranscription) {
+            console.log("[GeminiLive] 🎤 Input transcription:", content.inputTranscription.text)
+          }
+
+          // Handle output transcription (what the model said)
+          if (content.outputTranscription) {
+            console.log("[GeminiLive] 🔊 Output transcription:", content.outputTranscription.text)
+            this.callbacks.onTranscript(content.outputTranscription.text, content.turnComplete || false)
+          }
           
           // Handle audio parts
           if (content.modelTurn?.parts) {
+            console.log("[GeminiLive] 🎵 Model turn with", content.modelTurn.parts.length, "parts")
             for (const part of content.modelTurn.parts) {
               if (part.inlineData?.mimeType?.includes("audio")) {
                 // Decode base64 audio and play
                 const audioData = this.base64ToArrayBuffer(part.inlineData.data)
+                console.log("[GeminiLive] 🔊 Audio chunk:", audioData.byteLength, "bytes")
                 this.callbacks.onAudioData(audioData)
               }
               if (part.text) {
+                console.log("[GeminiLive] 📝 Text part:", part.text)
                 this.callbacks.onTranscript(part.text, content.turnComplete || false)
               }
             }
@@ -139,17 +160,19 @@ export class GeminiLiveClient {
 
           // Handle turn complete
           if (content.turnComplete) {
-            console.log("[GeminiLive] Turn complete")
+            console.log("[GeminiLive] ✅ Turn complete - model finished speaking")
+            // Signal turn complete with empty text
+            this.callbacks.onTranscript("", true)
           }
         }
 
         // Handle tool calls if any
         if (message.toolCall) {
-          console.log("[GeminiLive] Tool call received:", message.toolCall)
+          console.log("[GeminiLive] 🔧 Tool call received:", message.toolCall)
         }
       }
     } catch (err) {
-      console.error("[GeminiLive] Error parsing message:", err)
+      console.error("[GeminiLive] ❌ Error parsing message:", err)
     }
   }
 

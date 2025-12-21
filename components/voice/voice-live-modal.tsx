@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Mic, MicOff, Loader2, Volume2, Wifi, WifiOff, RefreshCw } from "lucide-react"
+import { X, Mic, Loader2, Volume2, Wifi, WifiOff, RefreshCw } from "lucide-react"
 import { useGeminiLive, type LiveVoiceState } from "@/hooks/use-gemini-live"
 import type { GeminiVoiceName } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -28,7 +28,6 @@ export function VoiceLiveModal({
     connect,
     disconnect,
     startListening,
-    stopListening,
   } = useGeminiLive({
     voice,
     systemInstruction: `You are VBot, a friendly AI fitness coach for V-Life. 
@@ -62,18 +61,16 @@ Speak naturally as if having a real conversation.`,
   }, [connect])
 
   const handleClose = useCallback(() => {
-    stopListening()
     disconnect()
     onClose()
-  }, [stopListening, disconnect, onClose])
+  }, [disconnect, onClose])
 
-  const handleMicToggle = useCallback(async () => {
-    if (state === 'listening') {
-      stopListening()
-    } else if (state === 'idle') {
-      await startListening()
+  // Auto-start listening when connected (VAD handles turn-taking)
+  useEffect(() => {
+    if (state === 'idle') {
+      startListening()
     }
-  }, [state, startListening, stopListening])
+  }, [state, startListening])
 
   const getStateConfig = (currentState: LiveVoiceState) => {
     switch (currentState) {
@@ -89,7 +86,7 @@ Speak naturally as if having a real conversation.`,
           icon: Mic,
           label: 'Listening...',
           color: 'from-green-500 to-emerald-600',
-          animate: false,
+          animate: true,  // Pulse while listening
         }
       case 'responding':
         return {
@@ -168,14 +165,11 @@ Speak naturally as if having a real conversation.`,
           {/* Main content */}
           <div className="relative z-10 flex h-full w-full max-w-md flex-col items-center justify-center px-6 py-12">
             
-            {/* Voice Orb */}
-            <motion.button
-              onClick={handleMicToggle}
-              disabled={state === 'connecting' || state === 'responding' || state === 'disconnected'}
+            {/* Voice Orb - Visual feedback only in continuous mode */}
+            <motion.div
               className={cn(
                 "relative mb-12 flex h-40 w-40 items-center justify-center rounded-full bg-gradient-to-br shadow-2xl transition-all",
-                config.color,
-                (state === 'connecting' || state === 'responding' || state === 'disconnected') && "opacity-50 cursor-not-allowed"
+                config.color
               )}
               whileTap={{ scale: 0.95 }}
               animate={{
@@ -218,7 +212,7 @@ Speak naturally as if having a real conversation.`,
               ) : (
                 <Icon className="h-16 w-16 text-white drop-shadow-lg" />
               )}
-            </motion.button>
+            </motion.div>
 
             {/* State label */}
             <motion.p
@@ -294,15 +288,15 @@ Speak naturally as if having a real conversation.`,
             {/* Instructions */}
             <div className="mt-8 text-center">
               <p className="text-sm text-white/50">
-                {state === 'idle' && "Tap the orb to start speaking"}
-                {state === 'listening' && "Speak naturally - I'm listening in real-time"}
+                {state === 'idle' && "Starting microphone..."}
+                {state === 'listening' && "Speak naturally - I'll respond when you pause"}
                 {state === 'responding' && "I'm responding..."}
                 {state === 'connecting' && "Setting up voice connection..."}
                 {state === 'error' && "Connection failed - tap retry above"}
                 {state === 'disconnected' && error && "Connection failed"}
               </p>
               <p className="mt-2 text-xs text-white/30">
-                Real-time voice powered by Gemini Live API
+                Real-time voice with automatic turn-taking
               </p>
             </div>
           </div>

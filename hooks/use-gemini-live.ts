@@ -68,13 +68,18 @@ export function useGeminiLive({
         {
           onAudioData: (audioData) => {
             // Play streamed audio immediately
+            console.log("[GeminiLive] 🔊 Received audio data:", audioData.byteLength, "bytes")
             audioPlayerRef.current?.play(audioData)
             setState('responding')
           },
           onTranscript: (text, isFinal) => {
+            console.log("[GeminiLive] 📝 Transcript:", text, "isFinal:", isFinal)
             setResponse(prev => prev + text)
             if (isFinal) {
               onTranscript?.(text)
+              // When model finishes speaking, go back to listening
+              console.log("[GeminiLive] ✅ Turn complete, back to listening")
+              setState('listening')
             }
           },
           onError: (err) => {
