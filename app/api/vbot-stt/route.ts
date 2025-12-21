@@ -1,71 +1,46 @@
 import { NextRequest, NextResponse } from "next/server"
-import { GoogleGenAI } from "@google/genai"
 import { createClient } from "@/lib/supabase/server"
+import { env } from "@/lib/env"
 
-// Gemini STT API Route - Transcribes user audio to text
-// Uses Gemini 2.5 Flash for audio understanding
-
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
+// Proxy to Supabase Edge Function for STT
+// This route forwards the audio to the vbot-stt edge function which uses Google Gemini
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify authentication
+    // Verify authentication and get session
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
     
-    if (authError || !user) {
+    if (authError || !session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!GOOGLE_API_KEY) {
-      console.error("[VBot STT] GOOGLE_API_KEY not configured")
-      return NextResponse.json({ error: "STT service not configured" }, { status: 500 })
-    }
-
-    // Get audio from FormData
+    // Get the audio formdata from the request
     const formData = await req.formData()
-    const audioFile = formData.get("audio") as File | null
+    
+    // Build the edge function URL
+    const edgeFunctionUrl = `${env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/vbot-stt`
 
-    if (!audioFile) {
-      return NextResponse.json({ error: "Audio file is required" }, { status: 400 })
-    }
-
-    // Read file as buffer
-    const arrayBuffer = await audioFile.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const base64Audio = buffer.toString("base64")
-
-    // Determine MIME type
-    const mimeType = audioFile.type || "audio/wav"
-
-    const client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY })
-
-    // Transcribe audio using Gemini
-    const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: "Transcribe this audio accurately. Return only the transcription text, nothing else. If the audio is unclear or empty, return an empty string.",
-            },
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: base64Audio,
-              },
-            },
-          ],
-        },
-      ],
+    // Forward the request to the edge function
+    const response = await fetch(edgeFunctionUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      },
+      body: formData,
     })
 
-    const transcript = response.text?.trim() || ""
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Edge function error" }))
+      console.error("[VBot STT Proxy] Edge function error:", errorData)
+      return NextResponse.json(errorData, { status: response.status })
+    }
 
-    return NextResponse.json({ transcript })
+    const data = await response.json()
+    return NextResponse.json(data)
   } catch (error) {
-    console.error("[VBot STT Error]", error)
+    console.error("[VBot STT Proxy Error]", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }

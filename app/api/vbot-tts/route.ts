@@ -1,85 +1,62 @@
 import { NextRequest, NextResponse } from "next/server"
-import { GoogleGenAI } from "@google/genai"
 import { createClient } from "@/lib/supabase/server"
+import { env } from "@/lib/env"
 
-// Gemini TTS API Route - Converts AI text responses to speech
-// Uses Gemini 2.5 Flash Preview TTS for natural, conversational voice output
-
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
+// Proxy to Supabase Edge Function for TTS
+// This route forwards the text to the vbot-tts edge function which uses Google Gemini
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify authentication
+    // Verify authentication and get session
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
     
-    if (authError || !user) {
+    if (authError || !session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!GOOGLE_API_KEY) {
-      console.error("[VBot TTS] GOOGLE_API_KEY not configured")
-      return NextResponse.json({ error: "TTS service not configured" }, { status: 500 })
-    }
+    // Get the request body
+    const body = await req.json()
+    
+    // Build the edge function URL
+    const edgeFunctionUrl = `${env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/vbot-tts`
 
-    const { text, voice = "Kore" } = await req.json()
-
-    if (!text || typeof text !== "string") {
-      return NextResponse.json({ error: "Text is required" }, { status: 400 })
-    }
-
-    // Limit text length to prevent abuse (TTS has 32k token context limit)
-    const truncatedText = text.slice(0, 4000)
-
-    const client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY })
-
-    // Generate speech with Gemini TTS
-    // The model responds naturally to the text content
-    const response = await client.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [
-        {
-          parts: [
-            {
-              text: `Say in a warm, friendly coaching tone as a fitness AI assistant: ${truncatedText}`,
-            },
-          ],
-        },
-      ],
-      config: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: voice,
-            },
-          },
-        },
-      },
-    })
-
-    // Extract audio data from response
-    const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data
-
-    if (!audioData) {
-      console.error("[VBot TTS] No audio data in response")
-      return NextResponse.json({ error: "Failed to generate audio" }, { status: 500 })
-    }
-
-    // Convert base64 to binary
-    const binaryData = Buffer.from(audioData, "base64")
-
-    // Return as WAV audio stream
-    return new NextResponse(binaryData, {
-      status: 200,
+    // Forward the request to the edge function
+    const response = await fetch(edgeFunctionUrl, {
+      method: "POST",
       headers: {
-        "Content-Type": "audio/wav",
-        "Content-Length": binaryData.length.toString(),
-        "Cache-Control": "no-cache",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify(body),
     })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Edge function error" }))
+      console.error("[VBot TTS Proxy] Edge function error:", errorData)
+      return NextResponse.json(errorData, { status: response.status })
+    }
+
+    const data = await response.json()
+    
+    // The edge function returns { audio: base64, mimeType: string }
+    // Convert to binary response for direct audio playback
+    if (data.audio) {
+      const binaryData = Buffer.from(data.audio, "base64")
+      return new NextResponse(binaryData, {
+        status: 200,
+        headers: {
+          "Content-Type": data.mimeType || "audio/wav",
+          "Content-Length": binaryData.length.toString(),
+          "Cache-Control": "no-cache",
+        },
+      })
+    }
+
+    return NextResponse.json(data)
   } catch (error) {
-    console.error("[VBot TTS Error]", error)
+    console.error("[VBot TTS Proxy Error]", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
