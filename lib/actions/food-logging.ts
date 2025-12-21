@@ -197,13 +197,18 @@ export async function parseFood(
       }
     }
     
-    console.log("[FoodLogging] Parse result:", {
+    console.log("[FoodLogging] Parse result:", JSON.stringify({
       success: result.success,
       foodsCount: result.foods?.length || 0,
       error: result.error,
       hasFoods: !!result.foods,
       resultKeys: Object.keys(result || {})
-    })
+    }, null, 2))
+    
+    // Log the full error if present
+    if (result.error) {
+      console.error("[FoodLogging] ERROR from edge function:", result.error)
+    }
     
     // Validate response structure
     if (!result || typeof result !== 'object') {

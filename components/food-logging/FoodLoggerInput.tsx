@@ -81,13 +81,12 @@ export function FoodLoggerInput({
         selectedDate
       )
 
-      console.log("[FoodLogger] Parse result received:", {
+      console.log("[FoodLogger] Parse result received:", JSON.stringify({
         success: result.success,
         foodsCount: result.foods?.length || 0,
         error: result.error,
         hasFoods: !!result.foods && result.foods.length > 0,
-        fullResult: result
-      })
+      }, null, 2))
 
       if (result.success && result.foods && result.foods.length > 0) {
         console.log("[FoodLogger] Calling onParseComplete with", result.foods.length, "foods")
@@ -95,14 +94,23 @@ export function FoodLoggerInput({
         setInput("")
         setMealTypeOverride(null)
       } else {
-        console.warn("[FoodLogger] Parse failed or no foods:", {
-          success: result.success,
-          foodsCount: result.foods?.length || 0,
-          error: result.error
-        })
+        const errorMessage = result.error || "Unknown error"
+        console.error("[FoodLogger] Parse failed or no foods. Error:", errorMessage)
+        console.error("[FoodLogger] Full result:", JSON.stringify(result, null, 2))
+        
+        // Provide more helpful error messages
+        let toastDescription = errorMessage
+        if (errorMessage.includes("OPENAI_API_KEY")) {
+          toastDescription = "AI service not configured. Please set OPENAI_API_KEY in Supabase secrets."
+        } else if (errorMessage.includes("not authenticated") || errorMessage.includes("auth")) {
+          toastDescription = "Please log in to use food logging."
+        } else if (errorMessage === "Unknown error" || !errorMessage) {
+          toastDescription = "Try describing your food differently"
+        }
+        
         toast({
           title: "Couldn't parse food",
-          description: result.error || "Try describing your food differently",
+          description: toastDescription,
           variant: "destructive",
         })
       }
