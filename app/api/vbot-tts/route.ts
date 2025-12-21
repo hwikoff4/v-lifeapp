@@ -37,7 +37,15 @@ export async function POST(req: NextRequest) {
     // The model responds naturally to the text content
     const response = await client.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
-      contents: `Say in a warm, friendly coaching tone as a fitness AI assistant: ${truncatedText}`,
+      contents: [
+        {
+          parts: [
+            {
+              text: `Say in a warm, friendly coaching tone as a fitness AI assistant: ${truncatedText}`,
+            },
+          ],
+        },
+      ],
       config: {
         responseModalities: ["AUDIO"],
         speechConfig: {

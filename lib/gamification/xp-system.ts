@@ -15,8 +15,12 @@ export const XP_REWARDS = {
   workout_complete: 100,
   workout_streak_7: 200,
   
-  // Nutrition
+  // Nutrition & Food Logging
   meal_logged: 10,
+  food_logged: 15, // AI food logging
+  food_log_streak_3: 50,
+  food_log_streak_7: 100,
+  full_day_logged: 30, // All 4 meals logged in a day
   macro_goal_hit: 75,
   
   // Weight & Progress

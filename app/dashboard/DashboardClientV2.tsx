@@ -234,35 +234,8 @@ function DashboardClientV2() {
           </div>
         </motion.div>
 
-        {/* Power Stats - Horizontal Row */}
-        <motion.div className="mb-6" variants={itemVariants}>
-          <PowerStats
-            workoutStreak={powerStatsData.workoutStreak}
-            nutritionScore={powerStatsData.nutritionScore}
-            habitCompletion={powerStatsData.habitCompletion}
-          />
-        </motion.div>
-
-        {/* Daily Missions */}
-        <motion.div className="mb-6" variants={itemVariants}>
-          <DailyMissions 
-            missions={vitalFlowMissions as any}
-            onMissionComplete={handleMissionComplete}
-          />
-        </motion.div>
-
-        {/* Achievements Carousel */}
-        {(appData?.allAchievements?.length ?? 0) > 0 && (
-          <motion.div className="mb-6" variants={itemVariants}>
-            <AchievementCarousel
-              allAchievements={appData?.allAchievements ?? []}
-              unlockedAchievements={appData?.unlockedAchievements ?? []}
-            />
-          </motion.div>
-        )}
-
         {/* Quick Actions */}
-        <motion.div className="space-y-3" variants={itemVariants}>
+        <motion.div className="space-y-3 mb-6" variants={itemVariants}>
           {/* Primary CTA - Start Workout */}
           <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
             <ButtonGlow 
@@ -298,6 +271,33 @@ function DashboardClientV2() {
             </motion.div>
           </div>
         </motion.div>
+
+        {/* Power Stats - Horizontal Row */}
+        <motion.div className="mb-6" variants={itemVariants}>
+          <PowerStats
+            workoutStreak={powerStatsData.workoutStreak}
+            nutritionScore={powerStatsData.nutritionScore}
+            habitCompletion={powerStatsData.habitCompletion}
+          />
+        </motion.div>
+
+        {/* Daily Missions */}
+        <motion.div className="mb-6" variants={itemVariants}>
+          <DailyMissions 
+            missions={vitalFlowMissions as any}
+            onMissionComplete={handleMissionComplete}
+          />
+        </motion.div>
+
+        {/* Achievements Carousel */}
+        {(appData?.allAchievements?.length ?? 0) > 0 && (
+          <motion.div className="mb-6" variants={itemVariants}>
+            <AchievementCarousel
+              allAchievements={appData?.allAchievements ?? []}
+              unlockedAchievements={appData?.unlockedAchievements ?? []}
+            />
+          </motion.div>
+        )}
       </motion.div>
 
       <BottomNav />

@@ -45,10 +45,13 @@ export interface AchievementCheckContext {
   overallStreak: number
   totalWorkouts: number
   totalMealsLogged: number
+  totalFoodLogs: number // AI food logging entries
+  foodLogStreak: number // Consecutive days with food logs
   totalMissionsComplete: number
   currentLevel: number
   macroStreakDays: number
   hasCompletedAllMissionsToday: boolean
+  hasLoggedAllMealsToday: boolean // All 4 meal types logged
   currentHour: number // 0-23
 }
 
@@ -67,10 +70,17 @@ export const ACHIEVEMENT_CONDITIONS: Record<string, (ctx: AchievementCheckContex
   workout_50: (ctx) => ctx.totalWorkouts >= 50,
   workout_100: (ctx) => ctx.totalWorkouts >= 100,
   
-  // Nutrition achievements
+  // Nutrition achievements (legacy meal plan)
   first_meal_log: (ctx) => ctx.totalMealsLogged >= 1,
   macro_streak_7: (ctx) => ctx.macroStreakDays >= 7,
   meals_logged_100: (ctx) => ctx.totalMealsLogged >= 100,
+  
+  // Food Logging achievements (AI food logger)
+  first_food_log: (ctx) => ctx.totalFoodLogs >= 1,
+  food_log_streak_3: (ctx) => ctx.foodLogStreak >= 3,
+  food_log_streak_7: (ctx) => ctx.foodLogStreak >= 7,
+  food_log_50: (ctx) => ctx.totalFoodLogs >= 50,
+  daily_log_complete: (ctx) => ctx.hasLoggedAllMealsToday,
   
   // Level achievements
   level_5: (ctx) => ctx.currentLevel >= 5,

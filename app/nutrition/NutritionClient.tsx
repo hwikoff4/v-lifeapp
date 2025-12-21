@@ -3,8 +3,8 @@
 import { useMemo, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { RefreshCw, ShoppingCart, ChevronRight, RotateCcw, Settings } from "lucide-react"
-import { motion } from "framer-motion"
+import { RefreshCw, ShoppingCart, ChevronRight, RotateCcw, Settings, UtensilsCrossed, ClipboardList } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
@@ -15,6 +15,7 @@ import { VitalFlowSupplementModal } from "@/app/vitalflow-supplement-modal"
 import { useToast } from "@/hooks/use-toast"
 import { useNutritionData, invalidateNutritionCache } from "@/hooks/use-nutrition-data"
 import { Skeleton, MealsListSkeleton } from "@/components/ui/skeleton-loaders"
+import { FoodLogHistory } from "@/components/food-logging"
 import type { DailyMeal } from "@/lib/actions/nutrition"
 import { cn } from "@/lib/utils"
 
@@ -25,9 +26,12 @@ interface MealAlternative {
   description?: string | null
 }
 
+type NutritionTab = "log" | "plan"
+
 export function NutritionClient() {
   const router = useRouter()
   const { toast } = useToast()
+  const [activeTab, setActiveTab] = useState<NutritionTab>("log")
   
   // Fetch nutrition data client-side
   const { data, isLoading, refresh } = useNutritionData()
@@ -189,14 +193,22 @@ export function NutritionClient() {
   const supplements = data?.supplements ?? []
   const tomorrowMeals = data?.tomorrowMeals ?? []
 
+  // Get macro targets for food log
+  const macroTargets = useMemo(() => ({
+    calories: data?.macros?.calories?.target || 2200,
+    protein: data?.macros?.protein?.target || 160,
+    carbs: data?.macros?.carbs?.target || 220,
+    fat: data?.macros?.fat?.target || 70,
+  }), [data?.macros])
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20">
       <div className="container max-w-md px-4 py-6">
         <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Nutrition Plan</h1>
-              <p className="text-white/70">Today's meal plan</p>
+              <h1 className="text-2xl font-bold text-white">Nutrition</h1>
+              <p className="text-white/70">Track & plan your meals</p>
             </div>
             <Link href="/tools">
               <ButtonGlow variant="outline-glow" size="icon" className="h-8 w-8">
@@ -206,6 +218,57 @@ export function NutritionClient() {
           </div>
         </motion.div>
 
+        {/* Tab Navigation */}
+        <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-50">
+          <div className="flex rounded-xl bg-white/5 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("log")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                activeTab === "log"
+                  ? "bg-accent text-black"
+                  : "text-white/60 hover:text-white"
+              )}
+            >
+              <UtensilsCrossed className="h-4 w-4" />
+              Food Log
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("plan")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                activeTab === "plan"
+                  ? "bg-accent text-black"
+                  : "text-white/60 hover:text-white"
+              )}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Meal Plan
+            </button>
+          </div>
+        </motion.div>
+
+        <AnimatePresence mode="wait">
+          {activeTab === "log" ? (
+            <motion.div
+              key="log"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <FoodLogHistory macroTargets={macroTargets} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="plan"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
         <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-75">
           <Card className="border-white/10 bg-black/50 backdrop-blur-sm">
             <CardContent className="p-4">
@@ -490,6 +553,9 @@ export function NutritionClient() {
             </CardContent>
           </Card>
         </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <MealSwapModal
           isOpen={swapModalOpen}

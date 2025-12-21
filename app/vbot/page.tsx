@@ -396,7 +396,7 @@ export default function VBotPage() {
   )
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-gradient-to-b from-black via-zinc-900 to-black pb-52 noise-overlay">
+    <div className="relative flex min-h-screen flex-col bg-gradient-to-b from-black via-zinc-900 to-black noise-overlay">
       {/* Background effects */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-[25%] -top-[25%] h-[50%] w-[50%] rounded-full bg-accent/5 blur-[120px]" />
@@ -421,7 +421,14 @@ export default function VBotPage() {
               </button>
               <div>
                 <h1 className="text-lg font-bold text-white flex items-center gap-2">
-                  VBot <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">BETA</span>
+                  VBot 
+                  <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">BETA</span>
+                  {voicePrefs.voiceEnabled && (
+                    <span className="flex items-center gap-1 rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-medium text-green-400">
+                      <Mic className="h-2.5 w-2.5" />
+                      VOICE
+                    </span>
+                  )}
                 </h1>
                 <p className="text-xs text-white/50">
                   {conversationId ? "Continuing conversation" : "Your AI Fitness Coach"}
@@ -445,10 +452,10 @@ export default function VBotPage() {
       </div>
 
       {/* Messages */}
-      <div className="relative z-0 container mx-auto max-w-md flex-1 overflow-y-auto px-4 py-6">
+      <div className="relative z-0 container mx-auto max-w-md flex-1 overflow-y-auto px-4 pt-6 pb-80">
         {messages.length === 0 ? (
           <motion.div
-            className="flex h-full flex-col items-center justify-center text-center"
+            className="flex flex-col items-center text-center pt-8"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -487,6 +494,9 @@ export default function VBotPage() {
             </p>
 
             <div className="w-full max-w-sm space-y-3">
+              <p className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">
+                Suggested questions
+              </p>
               {[
                 "How am I doing with my fitness goals?",
                 "What should I focus on this week?",
@@ -613,40 +623,70 @@ export default function VBotPage() {
       {/* Input */}
       <div className="sticky bottom-28 z-10 border-t border-white/5 bg-black/60 backdrop-blur-xl">
         <div className="container mx-auto max-w-md px-4 py-4">
-          <form onSubmit={handleSubmit} className="relative flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me anything..."
-              className="flex-1 rounded-full border border-white/10 bg-white/5 px-6 py-3.5 text-sm text-white shadow-inner placeholder:text-white/30 focus:border-accent/50 focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all"
-              disabled={isLoading}
-            />
-            {/* Voice input button */}
-            {voicePrefs.voiceEnabled && (
-              <VoiceChatButton
-                onTranscript={handleVoiceTranscript}
+          {/* Voice-first layout when voice is enabled */}
+          {voicePrefs.voiceEnabled ? (
+            <div className="space-y-3">
+              {/* Prominent Voice Button */}
+              <div className="flex items-center justify-center">
+                <VoiceChatButton
+                  onTranscript={handleVoiceTranscript}
+                  disabled={isLoading}
+                  size="large"
+                  showLabel
+                />
+              </div>
+              
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-[10px] text-white/30 uppercase tracking-wider">or type</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+              
+              {/* Text input (secondary) */}
+              <form onSubmit={handleSubmit} className="relative flex gap-2">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Type your message..."
+                  className="flex-1 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm text-white shadow-inner placeholder:text-white/30 focus:border-accent/50 focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all"
+                  disabled={isLoading}
+                />
+                <ButtonGlow
+                  type="submit"
+                  variant="accent-glow"
+                  size="icon"
+                  className="h-11 w-11 flex-shrink-0 rounded-full shadow-lg shadow-accent/20"
+                  disabled={!input.trim() || isLoading}
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </ButtonGlow>
+              </form>
+            </div>
+          ) : (
+            /* Standard text-first layout */
+            <form onSubmit={handleSubmit} className="relative flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask me anything..."
+                className="flex-1 rounded-full border border-white/10 bg-white/5 px-6 py-3.5 text-sm text-white shadow-inner placeholder:text-white/30 focus:border-accent/50 focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all"
                 disabled={isLoading}
               />
-            )}
-            <ButtonGlow
-              type="submit"
-              variant="accent-glow"
-              size="icon"
-              className="h-12 w-12 flex-shrink-0 rounded-full shadow-lg shadow-accent/20"
-              disabled={!input.trim() || isLoading}
-            >
-              {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-            </ButtonGlow>
-          </form>
-          {error && <p className="mt-2 text-xs text-red-500">Error: {error}</p>}
-          {/* Voice mode indicator */}
-          {voicePrefs.voiceEnabled && (
-            <p className="mt-2 text-center text-[10px] text-white/30 flex items-center justify-center gap-1">
-              <Mic className="h-3 w-3" />
-              Voice enabled · Tap mic to speak
-            </p>
+              <ButtonGlow
+                type="submit"
+                variant="accent-glow"
+                size="icon"
+                className="h-12 w-12 flex-shrink-0 rounded-full shadow-lg shadow-accent/20"
+                disabled={!input.trim() || isLoading}
+              >
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+              </ButtonGlow>
+            </form>
           )}
+          {error && <p className="mt-2 text-xs text-red-500">Error: {error}</p>}
         </div>
       </div>
 
