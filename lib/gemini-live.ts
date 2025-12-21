@@ -28,8 +28,8 @@ export class GeminiLiveClient {
 
   constructor(config: GeminiLiveConfig, callbacks: GeminiLiveCallbacks) {
     this.config = {
-      // Gemini Live API model for bidirectional streaming
-      model: "gemini-2.0-flash-live-preview-04-09",
+      // Gemini Live API model for bidirectional streaming (December 2025)
+      model: "gemini-2.5-flash-native-audio-preview-12-2025",
       ...config,
     }
     this.callbacks = callbacks
@@ -64,6 +64,11 @@ export class GeminiLiveClient {
         console.log("[GeminiLive] WebSocket closed:", event.code, event.reason)
         this.isConnected = false
         this.callbacks.onConnectionChange(false)
+        
+        // If closed with an error code, report the error
+        if (event.code !== 1000 && event.reason) {
+          this.callbacks.onError(new Error(event.reason))
+        }
       }
     })
   }

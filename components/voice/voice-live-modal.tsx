@@ -140,14 +140,14 @@ Speak naturally as if having a real conversation.`,
             <div className="absolute -bottom-[25%] -right-[25%] h-[50%] w-[50%] rounded-full bg-green-500/10 blur-[120px]" />
           </div>
 
-          {/* Close button */}
-          <motion.button
-            className="absolute right-6 top-6 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+          {/* Close button - always on top and clickable */}
+          <button
+            className="absolute right-6 top-6 z-[100] flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-90"
             onClick={handleClose}
-            whileTap={{ scale: 0.9 }}
+            type="button"
           >
             <X className="h-6 w-6" />
-          </motion.button>
+          </button>
 
           {/* Connection status */}
           <div className="absolute left-6 top-6 flex items-center gap-2">
