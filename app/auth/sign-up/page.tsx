@@ -109,7 +109,11 @@ export default function SignUpPage() {
     <div className="flex min-h-screen w-full items-center justify-center bg-black p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-white">.v Life</h1>
+          <img 
+            src="https://xiezvibwxvsulfiooknp.supabase.co/storage/v1/object/public/Public-assets/white-vlife-logo.png" 
+            alt="V-Life Logo" 
+            className="h-24 w-auto mx-auto mb-4" 
+          />
           <p className="mt-2 text-gray-400">Start your fitness journey</p>
         </div>
         <Card className="border-gray-800 bg-[#1a1f2e]">

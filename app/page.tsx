@@ -66,7 +66,7 @@ export default function WelcomePage() {
           animate={{ scale: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <img src="/logo.png" alt="V-Life Logo" className="h-48 w-auto" />
+          <img src="https://xiezvibwxvsulfiooknp.supabase.co/storage/v1/object/public/Public-assets/white-vlife-logo.png" alt="V-Life Logo" className="h-48 w-auto" />
         </motion.div>
 
         <motion.p

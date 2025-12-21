@@ -10,7 +10,7 @@ import { ButtonGlow } from "@/components/ui/button-glow"
 import { BottomNav } from "@/components/bottom-nav"
 import { cn } from "@/lib/utils"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { VoiceChatButton, VoicePlayback } from "@/components/voice"
+import { VoiceChatButton, VoicePlayback, VoiceConversationModal } from "@/components/voice"
 import type { VoicePreferences, GeminiVoiceName } from "@/lib/types"
 
 interface Message {
@@ -45,6 +45,7 @@ export default function VBotPage() {
   const [lastAssistantMessageId, setLastAssistantMessageId] = useState<string | null>(null)
   const [lastMessageWasVoice, setLastMessageWasVoice] = useState(false)
   const [isStreamingComplete, setIsStreamingComplete] = useState(false)
+  const [showVoiceModal, setShowVoiceModal] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -324,6 +325,24 @@ export default function VBotPage() {
       sendMessage(transcript)
     }
   }, [sendMessage])
+
+  // Handle opening Voice Focus Mode
+  const handleOpenVoiceModal = useCallback(() => {
+    setShowVoiceModal(true)
+  }, [])
+
+  // Handle voice modal messages update
+  const handleVoiceMessagesUpdate = useCallback((voiceMessages: Array<{ role: "user" | "assistant"; content: string }>) => {
+    // Convert voice messages to our Message format and update state
+    const formattedMessages: Message[] = voiceMessages.map((msg, idx) => ({
+      id: `voice-${Date.now()}-${idx}`,
+      role: msg.role,
+      content: msg.content,
+    }))
+    setMessages(formattedMessages)
+    // Refresh conversations list
+    loadConversations()
+  }, [loadConversations])
 
   // History sidebar
   const HistorySidebar = () => (
@@ -634,14 +653,21 @@ export default function VBotPage() {
           {/* Voice-first layout when voice is enabled */}
           {voicePrefs.voiceEnabled ? (
             <div className="space-y-3">
-              {/* Prominent Voice Button */}
+              {/* Prominent Voice Button - Opens Voice Focus Mode */}
               <div className="flex items-center justify-center">
-                <VoiceChatButton
-                  onTranscript={handleVoiceTranscript}
+                <button
+                  onClick={handleOpenVoiceModal}
                   disabled={isLoading}
-                  size="large"
-                  showLabel
-                />
+                  className="group flex items-center gap-4 rounded-full bg-gradient-to-br from-green-500 to-green-600 px-8 py-4 text-white shadow-lg shadow-green-500/30 transition-all hover:from-green-400 hover:to-green-500 hover:shadow-green-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                    <Mic className="h-7 w-7" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-base font-semibold">Start Voice Chat</p>
+                    <p className="text-sm text-white/70">Tap to begin talking</p>
+                  </div>
+                </button>
               </div>
               
               {/* Divider */}
@@ -697,6 +723,16 @@ export default function VBotPage() {
           {error && <p className="mt-2 text-xs text-red-500">Error: {error}</p>}
         </div>
       </div>
+
+      {/* Voice Conversation Modal */}
+      <VoiceConversationModal
+        isOpen={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+        voice={voicePrefs.selectedVoice}
+        conversationId={conversationId}
+        onConversationIdChange={setConversationId}
+        onMessagesUpdate={handleVoiceMessagesUpdate}
+      />
 
       <BottomNav />
     </div>

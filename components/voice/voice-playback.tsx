@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Volume2, VolumeX, Loader2, RotateCcw } from "lucide-react"
 import { useAudioPlayer } from "@/hooks/use-audio-player"
@@ -108,9 +108,17 @@ export function VoicePlayback({
   }, [fetchAudio, play])
 
   // Auto-play when autoPlay becomes true (e.g., after streaming completes)
+  // Track the last text we auto-played to prevent playing stale content
+  const lastAutoPlayedTextRef = useRef<string>("")
+  
   useEffect(() => {
-    if (autoPlay && text) {
+    if (autoPlay && text && text !== lastAutoPlayedTextRef.current) {
       console.log("[VoicePlayback] Auto-play triggered, text length:", text.length)
+      lastAutoPlayedTextRef.current = text
+      
+      // Clear any cached audio to ensure we fetch fresh
+      setAudioBlob(null)
+      
       // Small delay to ensure all state is settled
       const timer = setTimeout(() => {
         handlePlay()
