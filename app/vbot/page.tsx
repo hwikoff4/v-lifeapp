@@ -43,6 +43,7 @@ export default function VBotPage() {
   const [loadingConversations, setLoadingConversations] = useState(false)
   const [voicePrefs, setVoicePrefs] = useState<VoicePreferences>(DEFAULT_VOICE_PREFS)
   const [lastAssistantMessageId, setLastAssistantMessageId] = useState<string | null>(null)
+  const [lastMessageWasVoice, setLastMessageWasVoice] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -307,12 +308,14 @@ export default function VBotPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
+    setLastMessageWasVoice(false)
     sendMessage(input)
   }
 
   // Handle voice transcript from speech-to-text
   const handleVoiceTranscript = useCallback((transcript: string) => {
     if (transcript.trim()) {
+      setLastMessageWasVoice(true)
       sendMessage(transcript)
     }
   }, [sendMessage])
@@ -585,7 +588,7 @@ export default function VBotPage() {
                           <VoicePlayback
                             text={message.content}
                             voice={voicePrefs.selectedVoice}
-                            autoPlay={voicePrefs.autoPlayResponses && message.id === lastAssistantMessageId}
+                            autoPlay={(voicePrefs.autoPlayResponses || lastMessageWasVoice) && message.id === lastAssistantMessageId}
                             size="sm"
                           />
                         </div>

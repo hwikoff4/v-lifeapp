@@ -66,11 +66,14 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    console.log("[VBot TTS] Generating speech for:", text.slice(0, 100), "voice:", voice)
+    // Limit text length to prevent abuse
+    const truncatedText = text.slice(0, 4000)
 
-    // Call Google Gemini TTS API
+    console.log("[VBot TTS] Generating speech for:", truncatedText.slice(0, 100), "voice:", voice)
+
+    // Call Google Gemini TTS API using the TTS-specific model
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${googleApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${googleApiKey}`,
       {
         method: "POST",
         headers: {
@@ -81,7 +84,7 @@ Deno.serve(async (req: Request) => {
             {
               parts: [
                 {
-                  text: `Convert the following text to speech. Speak it clearly and naturally:\n\n${text}`,
+                  text: `Say in a warm, friendly coaching tone as a fitness AI assistant: ${truncatedText}`,
                 },
               ],
             },
