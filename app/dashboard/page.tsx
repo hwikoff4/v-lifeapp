@@ -1,11 +1,11 @@
-import DashboardClient from "./DashboardClient"
+import DashboardClientV2 from "./DashboardClientV2"
 
 /**
- * Dashboard page - now lightweight and fast
+ * Dashboard page - Gamified V2
  * 
- * Data is fetched once at app start by AppDataProvider and cached,
- * so this component no longer needs to query the database on every navigation.
+ * Features XP, levels, achievements, and daily missions.
+ * Data is fetched once at app start by AppDataProvider and cached.
  */
 export default function DashboardPage() {
-  return <DashboardClient />
+  return <DashboardClientV2 />
 }

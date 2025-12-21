@@ -508,6 +508,15 @@ export async function completeWorkout(workoutId: string) {
     return { success: false, error: "Unable to complete workout" }
   }
 
+  // Award XP for completing workout
+  try {
+    const { addXP } = await import("@/lib/actions/gamification")
+    await addXP('workout_complete', workoutId, 'workout')
+  } catch (xpError) {
+    console.error("[Workout] Failed to award XP:", xpError)
+    // Don't fail the workout completion if XP fails
+  }
+
   revalidatePath("/fitness")
   return { success: true }
 }

@@ -25,6 +25,7 @@ import {
   shouldPromptWeeklyReflectionInternal,
   getVitalFlowSuggestionsInternal,
 } from "@/lib/actions/app-data-internal"
+import { getGamificationDataInternal } from "@/lib/actions/gamification"
 import type { AppData } from "@/lib/types/app-data"
 
 const DEFAULT_TIMEZONE = "America/New_York"
@@ -66,6 +67,7 @@ export async function GET() {
       dailyInsight,
       shouldPromptWeeklyReflection,
       vitalFlowSuggestions,
+      gamificationData,
     ] = await Promise.all([
       getUserHabitsInternal(userId, timezone, supabase),
       getWeeklyProgressInternal(userId, timezone, supabase),
@@ -77,6 +79,7 @@ export async function GET() {
       getDailyInsightInternal(userId, timezone, supabase, accessToken),
       shouldPromptWeeklyReflectionInternal(userId, supabase),
       getVitalFlowSuggestionsInternal(userId, supabase),
+      getGamificationDataInternal(userId, supabase),
     ])
 
     // Build the AppData payload
@@ -100,6 +103,10 @@ export async function GET() {
       dailyInsight: dailyInsight,
       shouldPromptWeeklyReflection: shouldPromptWeeklyReflection,
       vitalFlowSuggestions: vitalFlowSuggestions,
+      gamification: gamificationData.stats,
+      unlockedAchievements: gamificationData.achievements,
+      allAchievements: gamificationData.allAchievements,
+      todayXP: gamificationData.todayXP,
       fetchedAt: new Date().toISOString(),
     }
 

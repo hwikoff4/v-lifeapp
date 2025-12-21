@@ -72,6 +72,14 @@ export async function addWeightEntry(weight: number, note?: string) {
     return { success: false, error: "Unable to save weight entry" }
   }
 
+  // Award XP for logging weight
+  try {
+    const { addXP } = await import("@/lib/actions/gamification")
+    await addXP('weight_logged', undefined, 'weight_entry')
+  } catch (xpError) {
+    console.error("[Progress] Failed to award XP:", xpError)
+  }
+
   revalidatePath("/tools")
   return { success: true }
 }

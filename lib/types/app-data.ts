@@ -14,6 +14,9 @@ import type {
   NotificationPreferences,
 } from "./index"
 
+import type { GamificationStats } from "@/lib/gamification"
+import type { Achievement, UserAchievement } from "@/lib/gamification/achievements"
+
 /**
  * VitalFlow suggestion for daily habits (simplified for AppData)
  */
@@ -86,6 +89,18 @@ export interface AppData {
 
   /** VitalFlow daily habit suggestions */
   vitalFlowSuggestions: VitalFlowSuggestionData[]
+
+  /** Gamification stats (XP, level, title, etc.) */
+  gamification: GamificationStats | null
+
+  /** User's unlocked achievements */
+  unlockedAchievements: UserAchievement[]
+
+  /** All available achievements */
+  allAchievements: Achievement[]
+
+  /** XP earned today */
+  todayXP: number
 
   /** Timestamp of when this data was last fetched (ISO string) */
   fetchedAt: string
