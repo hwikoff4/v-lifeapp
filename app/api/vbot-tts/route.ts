@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 // Gemini TTS API Route - Converts AI text responses to speech
 // Uses Gemini 2.5 Flash Preview TTS for natural, conversational voice output
 
-const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!GOOGLE_AI_API_KEY) {
-      console.error("[VBot TTS] GOOGLE_AI_API_KEY not configured")
+    if (!GOOGLE_API_KEY) {
+      console.error("[VBot TTS] GOOGLE_API_KEY not configured")
       return NextResponse.json({ error: "TTS service not configured" }, { status: 500 })
     }
 
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     // Limit text length to prevent abuse (TTS has 32k token context limit)
     const truncatedText = text.slice(0, 4000)
 
-    const client = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY })
+    const client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY })
 
     // Generate speech with Gemini TTS
     // The model responds naturally to the text content

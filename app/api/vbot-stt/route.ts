@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 // Gemini STT API Route - Transcribes user audio to text
 // Uses Gemini 2.5 Flash for audio understanding
 
-const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!GOOGLE_AI_API_KEY) {
-      console.error("[VBot STT] GOOGLE_AI_API_KEY not configured")
+    if (!GOOGLE_API_KEY) {
+      console.error("[VBot STT] GOOGLE_API_KEY not configured")
       return NextResponse.json({ error: "STT service not configured" }, { status: 500 })
     }
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     // Determine MIME type
     const mimeType = audioFile.type || "audio/wav"
 
-    const client = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY })
+    const client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY })
 
     // Transcribe audio using Gemini
     const response = await client.models.generateContent({
