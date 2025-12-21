@@ -7,6 +7,8 @@ import type { GeminiVoiceName } from "@/lib/types"
 
 export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'error'
 
+export type TTSMode = 'browser' | 'gemini'
+
 interface Message {
   role: "user" | "assistant"
   content: string
@@ -17,6 +19,7 @@ interface UseVoiceConversationOptions {
   conversationId?: string | null
   onConversationIdChange?: (id: string) => void
   onMessagesUpdate?: (messages: Message[]) => void
+  ttsMode?: TTSMode
 }
 
 interface UseVoiceConversationReturn {
@@ -37,6 +40,7 @@ export function useVoiceConversation({
   conversationId,
   onConversationIdChange,
   onMessagesUpdate,
+  ttsMode = "browser", // Default to fast browser TTS
 }: UseVoiceConversationOptions): UseVoiceConversationReturn {
   const [state, setState] = useState<VoiceState>('idle')
   const [userTranscript, setUserTranscript] = useState("")
@@ -95,13 +99,19 @@ export function useVoiceConversation({
 
   const handleSTT = async (audioBlob: Blob): Promise<string | null> => {
     try {
+      console.log(`[VoiceConversation] 🎙️ STT request for ${audioBlob.size} byte audio`)
+      
       const formData = new FormData()
       formData.append("audio", audioBlob, "recording.webm")
 
+      const startFetch = Date.now()
       const response = await fetch("/api/vbot-stt", {
         method: "POST",
         body: formData,
       })
+
+      const fetchDuration = Date.now() - startFetch
+      console.log(`[VoiceConversation] 🎙️ STT fetch took ${fetchDuration}ms, status: ${response.status}`)
 
       if (!response.ok) {
         throw new Error("Transcription failed")
@@ -117,6 +127,9 @@ export function useVoiceConversation({
 
   const handleChat = async (userMessage: string): Promise<string> => {
     try {
+      console.log(`[VoiceConversation] 💬 Chat request with message: "${userMessage.slice(0, 50)}..."`)
+      const startTime = Date.now()
+      
       // Get auth token
       const { createClient } = await import("@/lib/supabase/client")
       const supabase = createClient()
@@ -137,6 +150,7 @@ export function useVoiceConversation({
 
       abortControllerRef.current = new AbortController()
 
+      const fetchStart = Date.now()
       const response = await fetch(
         `${supabaseUrl}/functions/v1/vbot`,
         {
@@ -152,6 +166,9 @@ export function useVoiceConversation({
           signal: abortControllerRef.current.signal,
         }
       )
+
+      const fetchDuration = Date.now() - fetchStart
+      console.log(`[VoiceConversation] 💬 Chat fetch took ${fetchDuration}ms, status: ${response.status}`)
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -171,10 +188,20 @@ export function useVoiceConversation({
 
       const decoder = new TextDecoder()
       let fullResponse = ""
+      let firstChunkTime = 0
+      let chunkCount = 0
 
+      const streamStart = Date.now()
+      
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+
+        if (chunkCount === 0) {
+          firstChunkTime = Date.now() - streamStart
+          console.log(`[VoiceConversation] 💬 First chunk received in ${firstChunkTime}ms`)
+        }
+        chunkCount++
 
         const chunk = decoder.decode(value, { stream: true })
         const lines = chunk.split("\n")
@@ -192,6 +219,11 @@ export function useVoiceConversation({
         }
       }
 
+      const streamDuration = Date.now() - streamStart
+      const totalDuration = Date.now() - startTime
+      console.log(`[VoiceConversation] 💬 Streaming complete in ${streamDuration}ms (${chunkCount} chunks, first chunk: ${firstChunkTime}ms)`)
+      console.log(`[VoiceConversation] 💬 Total chat time: ${totalDuration}ms, response length: ${fullResponse.length}`)
+
       return fullResponse
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -202,19 +234,38 @@ export function useVoiceConversation({
     }
   }
 
-  const handleTTS = async (text: string): Promise<Blob> => {
+  const handleTTS = async (text: string): Promise<Blob | null> => {
     try {
+      if (ttsMode === 'browser') {
+        // Use fast browser TTS - near instant
+        console.log(`[VoiceConversation] 🎤 Using browser TTS for ${text.length} characters`)
+        return null // Signal to use browser speech
+      }
+      
+      // Use Gemini TTS for high quality
+      console.log(`[VoiceConversation] 🎤 Using Gemini TTS for ${text.length} characters`)
+      const startFetch = Date.now()
+      
       const response = await fetch("/api/vbot-tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice }),
       })
 
+      const fetchDuration = Date.now() - startFetch
+      console.log(`[VoiceConversation] 🎤 TTS fetch took ${fetchDuration}ms, status: ${response.status}`)
+
       if (!response.ok) {
         throw new Error(`TTS failed: ${response.status}`)
       }
 
-      return await response.blob()
+      const blobStart = Date.now()
+      const blob = await response.blob()
+      const blobDuration = Date.now() - blobStart
+      
+      console.log(`[VoiceConversation] 🎤 TTS blob read took ${blobDuration}ms, size: ${blob.size} bytes`)
+      
+      return blob
     } catch (err) {
       console.error("[VoiceConversation] TTS error:", err)
       throw err
@@ -248,9 +299,13 @@ export function useVoiceConversation({
     }
 
     try {
+      const startTime = Date.now()
+      
       // Step 1: STT
-      console.log("[VoiceConversation] Starting STT...")
+      console.log("[VoiceConversation] ⏱️ Starting STT...")
+      const sttStart = Date.now()
       const transcript = await handleSTT(audioBlob)
+      const sttDuration = Date.now() - sttStart
       
       if (!transcript) {
         setState('error')
@@ -258,7 +313,8 @@ export function useVoiceConversation({
         return
       }
 
-      console.log("[VoiceConversation] Transcript:", transcript)
+      console.log(`[VoiceConversation] ✅ STT complete in ${sttDuration}ms`)
+      console.log("[VoiceConversation] 📝 Transcript:", transcript)
       setUserTranscript(transcript)
 
       // Update messages with user input
@@ -267,8 +323,10 @@ export function useVoiceConversation({
       onMessagesUpdate?.(newMessages)
 
       // Step 2: Chat
-      console.log("[VoiceConversation] Sending to chat...")
+      console.log("[VoiceConversation] ⏱️ Sending to chat...")
+      const chatStart = Date.now()
       const response = await handleChat(transcript)
+      const chatDuration = Date.now() - chatStart
       
       if (!response) {
         setState('error')
@@ -276,7 +334,8 @@ export function useVoiceConversation({
         return
       }
 
-      console.log("[VoiceConversation] Response received:", response.slice(0, 100))
+      console.log(`[VoiceConversation] ✅ Chat complete in ${chatDuration}ms`)
+      console.log("[VoiceConversation] 💬 Response received (length: ${response.length}):", response.slice(0, 100))
 
       // Update messages with assistant response
       const finalMessages = [...newMessages, { role: "assistant" as const, content: response }]
@@ -284,20 +343,49 @@ export function useVoiceConversation({
       onMessagesUpdate?.(finalMessages)
 
       // Step 3: TTS
-      console.log("[VoiceConversation] Generating audio...")
+      console.log("[VoiceConversation] ⏱️ Generating audio...")
       setState('speaking')
+      const ttsStart = Date.now()
       const audioBlob2 = await handleTTS(response)
+      const ttsDuration = Date.now() - ttsStart
+      
+      console.log(`[VoiceConversation] ✅ TTS complete in ${ttsDuration}ms`)
       
       // Play audio
-      console.log("[VoiceConversation] Playing audio...")
-      await play(audioBlob2)
+      console.log("[VoiceConversation] 🔊 Playing audio...")
+      const playStart = Date.now()
+      
+      if (audioBlob2) {
+        // Play Gemini TTS audio
+        await play(audioBlob2)
+      } else {
+        // Use browser speech synthesis (instant)
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(response)
+          utterance.rate = 1.1 // Slightly faster for more natural conversation
+          utterance.pitch = 1.0
+          
+          // Wait for speech to complete
+          await new Promise<void>((resolve) => {
+            utterance.onend = () => resolve()
+            utterance.onerror = () => resolve()
+            window.speechSynthesis.speak(utterance)
+          })
+        }
+      }
+      
+      const playDuration = Date.now() - playStart
+      
+      const totalDuration = Date.now() - startTime
+      console.log(`[VoiceConversation] ✅ Playback complete in ${playDuration}ms`)
+      console.log(`[VoiceConversation] 📊 Total pipeline: ${totalDuration}ms (STT: ${sttDuration}ms, Chat: ${chatDuration}ms, TTS: ${ttsDuration}ms, Play: ${playDuration}ms)`)
       
     } catch (err) {
-      console.error("[VoiceConversation] Pipeline error:", err)
+      console.error("[VoiceConversation] ❌ Pipeline error:", err)
       setState('error')
       setError(err instanceof Error ? err.message : "Something went wrong")
     }
-  }, [state, stopRecording, messages, voice, onMessagesUpdate, play])
+  }, [state, stopRecording, messages, voice, ttsMode, onMessagesUpdate, play])
 
   const cancelConversation = useCallback(() => {
     // Abort any ongoing requests
