@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { RefreshCw, ShoppingCart, ChevronRight, RotateCcw, Settings } from "lucide-react"
@@ -13,17 +13,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { MealSwapModal } from "@/app/meal-swap-modal"
 import { VitalFlowSupplementModal } from "@/app/vitalflow-supplement-modal"
 import { useToast } from "@/hooks/use-toast"
-import type { Macros, Supplement } from "@/lib/types"
+import { useNutritionData, invalidateNutritionCache } from "@/hooks/use-nutrition-data"
+import { Skeleton, MealsListSkeleton } from "@/components/ui/skeleton-loaders"
 import type { DailyMeal } from "@/lib/actions/nutrition"
 import { cn } from "@/lib/utils"
-
-interface NutritionClientProps {
-  meals: DailyMeal[]
-  totals: { calories: number; protein: number; carbs: number; fat: number }
-  macros: Macros
-  supplements: Supplement[]
-  tomorrowMeals: DailyMeal[]
-}
 
 interface MealAlternative {
   id: string
@@ -32,16 +25,15 @@ interface MealAlternative {
   description?: string | null
 }
 
-export function NutritionClient({
-  meals,
-  totals,
-  macros,
-  supplements,
-  tomorrowMeals,
-}: NutritionClientProps) {
+export function NutritionClient() {
   const router = useRouter()
   const { toast } = useToast()
-  const [mealPlan, setMealPlan] = useState(meals)
+  
+  // Fetch nutrition data client-side
+  const { data, isLoading, refresh } = useNutritionData()
+  
+  // Local state for meal plan (updated when data loads or after mutations)
+  const [mealPlan, setMealPlan] = useState<DailyMeal[]>([])
   const [swapModalOpen, setSwapModalOpen] = useState(false)
   const [selectedMealForSwap, setSelectedMealForSwap] = useState<DailyMeal | null>(null)
   const [alternatives, setAlternatives] = useState<MealAlternative[]>([])
@@ -49,6 +41,13 @@ export function NutritionClient({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [updatingMealId, setUpdatingMealId] = useState<string | null>(null)
   const [isVitalFlowModalOpen, setIsVitalFlowModalOpen] = useState(false)
+
+  // Sync meal plan with fetched data
+  useEffect(() => {
+    if (data?.meals) {
+      setMealPlan(data.meals)
+    }
+  }, [data?.meals])
 
   const handleRefreshPlan = async () => {
     if (isRefreshing) return
@@ -64,7 +63,9 @@ export function NutritionClient({
         title: "Plan refreshed",
         description: "Your meal plan has been updated with fresh suggestions!",
       })
-      router.refresh()
+      // Invalidate cache and refresh data
+      invalidateNutritionCache()
+      await refresh()
     } catch (err) {
       console.error("[Nutrition] Failed to regenerate plan:", err)
       toast({
@@ -78,8 +79,8 @@ export function NutritionClient({
   }
 
   const eatenTotals = useMemo(() => {
-    if (mealPlan.length === 0) {
-      return totals
+    if (mealPlan.length === 0 && data?.totals) {
+      return data.totals
     }
 
     return mealPlan.reduce(
@@ -94,16 +95,25 @@ export function NutritionClient({
       },
       { calories: 0, protein: 0, carbs: 0, fat: 0 },
     )
-  }, [mealPlan, totals])
+  }, [mealPlan, data?.totals])
 
   const macrosWithCurrent = useMemo(() => {
+    const macros = data?.macros
+    if (!macros) {
+      return {
+        calories: { current: 0, target: 2200 },
+        protein: { current: 0, target: 160, unit: "g" },
+        carbs: { current: 0, target: 220, unit: "g" },
+        fat: { current: 0, target: 70, unit: "g" },
+      }
+    }
     return {
       calories: { ...macros.calories, current: eatenTotals.calories },
       protein: { ...macros.protein, current: eatenTotals.protein },
       carbs: { ...macros.carbs, current: eatenTotals.carbs },
       fat: { ...macros.fat, current: eatenTotals.fat },
     }
-  }, [macros, eatenTotals])
+  }, [data?.macros, eatenTotals])
 
   const handleToggleEaten = async (meal: DailyMeal, nextValue: boolean) => {
     const previousValue = meal.isEaten
@@ -162,7 +172,9 @@ export function NutritionClient({
         title: "Meal updated",
         description: `${selectedMealForSwap.type} has been refreshed.`,
       })
-      router.refresh()
+      // Invalidate cache and refresh data
+      invalidateNutritionCache()
+      await refresh()
       setSwapModalOpen(false)
     } catch (error) {
       console.error("[Nutrition] Failed to swap meal:", error)
@@ -173,6 +185,9 @@ export function NutritionClient({
       })
     }
   }
+
+  const supplements = data?.supplements ?? []
+  const tomorrowMeals = data?.tomorrowMeals ?? []
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20">
@@ -197,48 +212,71 @@ export function NutritionClient({
               <h2 className="mb-3 text-lg font-bold text-white">Macros Summary</h2>
               <p className="mb-3 text-xs text-white/60">Based on eaten meals</p>
 
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-white/70">Calories</span>
-                    <span className="text-white">
-                      {macrosWithCurrent.calories.current} / {macrosWithCurrent.calories.target} kcal
-                    </span>
-                  </div>
-                  <Progress
-                    value={
-                      (macrosWithCurrent.calories.current / (macrosWithCurrent.calories.target || 1)) *
-                      100
-                    }
-                    className="h-2 bg-white/10"
-                    indicatorClassName="bg-accent"
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  {(["protein", "carbs", "fat"] as const).map((macro) => (
-                    <div key={macro} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="capitalize text-white/70">{macro}</span>
-                        <span className="text-white">
-                          {macrosWithCurrent[macro].current}
-                          {macrosWithCurrent[macro].unit || ""}
-                        </span>
-                      </div>
-                      <Progress
-                        value={
-                          (macrosWithCurrent[macro].current / (macrosWithCurrent[macro].target || 1)) *
-                          100
-                        }
-                        className="h-1.5 bg-white/10"
-                        indicatorClassName={
-                          macro === "protein" ? "bg-accent" : macro === "carbs" ? "bg-blue-500" : "bg-green-500"
-                        }
-                      />
+              {isLoading ? (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-24" />
                     </div>
-                  ))}
+                    <Skeleton className="h-2 w-full" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="flex justify-between">
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-3 w-8" />
+                        </div>
+                        <Skeleton className="h-1.5 w-full" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">Calories</span>
+                      <span className="text-white">
+                        {macrosWithCurrent.calories.current} / {macrosWithCurrent.calories.target} kcal
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        (macrosWithCurrent.calories.current / (macrosWithCurrent.calories.target || 1)) *
+                        100
+                      }
+                      className="h-2 bg-white/10"
+                      indicatorClassName="bg-accent"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    {(["protein", "carbs", "fat"] as const).map((macro) => (
+                      <div key={macro} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="capitalize text-white/70">{macro}</span>
+                          <span className="text-white">
+                            {macrosWithCurrent[macro].current}
+                            {macrosWithCurrent[macro].unit || ""}
+                          </span>
+                        </div>
+                        <Progress
+                          value={
+                            (macrosWithCurrent[macro].current / (macrosWithCurrent[macro].target || 1)) *
+                            100
+                          }
+                          className="h-1.5 bg-white/10"
+                          indicatorClassName={
+                            macro === "protein" ? "bg-accent" : macro === "carbs" ? "bg-blue-500" : "bg-green-500"
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -246,131 +284,136 @@ export function NutritionClient({
         <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-100">
           <h2 className="mb-3 text-lg font-bold text-white">Today's Meals</h2>
 
-          <div className="space-y-3">
-            {mealPlan.map((meal) => {
-              const isUpdating = updatingMealId === meal.logId
-              return (
-                <Card
-                  key={meal.logId}
-                  className={cn(
-                    "overflow-hidden border-white/10 bg-black/50 backdrop-blur-sm transition-colors",
-                    meal.isEaten && "border-accent/40 bg-black/40",
-                  )}
-                >
-                  <CardContent className="p-0">
-                    <div className="flex items-stretch">
-                      <div className="flex items-center justify-center px-3">
-                        <Checkbox
-                          checked={meal.isEaten}
-                          onCheckedChange={(checked) => handleToggleEaten(meal, checked === true)}
-                          disabled={isUpdating}
-                          aria-label={`${meal.isEaten ? "Mark as not eaten" : "Mark as eaten"}: ${meal.name}`}
-                          className="border-white/30 data-[state=checked]:border-accent data-[state=checked]:bg-accent/90"
-                        />
-                      </div>
-                      <div
-                        className={cn(
-                          "h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5 transition-opacity",
-                          meal.isEaten && "opacity-70",
-                        )}
-                      >
-                        <img
-                          src={meal.image || "/placeholder.svg"}
-                          alt={meal.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div
-                        className={cn(
-                          "flex flex-1 flex-col justify-between p-3 transition-opacity",
-                          meal.isEaten && "opacity-70",
-                        )}
-                      >
-                        <div>
-                          <span className="text-xs font-medium text-accent">{meal.type}</span>
-                          <h3 className="font-medium text-white">{meal.name}</h3>
+          {isLoading ? (
+            <MealsListSkeleton />
+          ) : (
+            <div className="space-y-3">
+              {mealPlan.map((meal) => {
+                const isUpdating = updatingMealId === meal.logId
+                return (
+                  <Card
+                    key={meal.logId}
+                    className={cn(
+                      "overflow-hidden border-white/10 bg-black/50 backdrop-blur-sm transition-colors",
+                      meal.isEaten && "border-accent/40 bg-black/40",
+                    )}
+                  >
+                    <CardContent className="p-0">
+                      <div className="flex items-stretch">
+                        <div className="flex items-center justify-center px-3">
+                          <Checkbox
+                            checked={meal.isEaten}
+                            onCheckedChange={(checked) => handleToggleEaten(meal, checked === true)}
+                            disabled={isUpdating}
+                            aria-label={`${meal.isEaten ? "Mark as not eaten" : "Mark as eaten"}: ${meal.name}`}
+                            className="border-white/30 data-[state=checked]:border-accent data-[state=checked]:bg-accent/90"
+                          />
                         </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-white/70">{meal.calories} kcal</span>
-                            {meal.isEaten ? (
-                              <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[11px] font-semibold text-accent">
-                                Eaten
-                              </span>
-                            ) : null}
+                        <div
+                          className={cn(
+                            "h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5 transition-opacity",
+                            meal.isEaten && "opacity-70",
+                          )}
+                        >
+                          <img
+                            src={meal.image || "/placeholder.svg"}
+                            alt={meal.name}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <div
+                          className={cn(
+                            "flex flex-1 flex-col justify-between p-3 transition-opacity",
+                            meal.isEaten && "opacity-70",
+                          )}
+                        >
+                          <div>
+                            <span className="text-xs font-medium text-accent">{meal.type}</span>
+                            <h3 className="font-medium text-white">{meal.name}</h3>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => openSwapModal(meal)}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 transition-all hover:bg-accent/30 group"
-                              title="Swap this meal"
-                              type="button"
-                              disabled={isUpdating}
-                            >
-                              <RotateCcw className="h-4 w-4 text-accent transition-transform duration-300 group-hover:rotate-180" />
-                            </button>
-                            <ChevronRight className="h-4 w-4 text-white/40" />
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-white/70">{meal.calories} kcal</span>
+                              {meal.isEaten ? (
+                                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                                  Eaten
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => openSwapModal(meal)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 transition-all hover:bg-accent/30 group"
+                                title="Swap this meal"
+                                type="button"
+                                disabled={isUpdating}
+                              >
+                                <RotateCcw className="h-4 w-4 text-accent transition-transform duration-300 group-hover:rotate-180" />
+                              </button>
+                              <ChevronRight className="h-4 w-4 text-white/40" />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
         </motion.div>
 
         <motion.div className="mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-125">
           <h2 className="mb-3 text-lg font-bold text-white">Tomorrow's Plan</h2>
 
-          <div className="space-y-3">
-            {tomorrowMeals.length === 0 ? (
-              <p className="text-sm text-white/60">Creating a fresh plan for tomorrow...</p>
-            ) : (
-              tomorrowMeals.map((meal) => (
-                <Card
-                  key={`tomorrow-${meal.type}`}
-                  className="overflow-hidden border-white/10 bg-black/40 backdrop-blur-sm"
-                >
-                  <CardContent className="p-0">
-                    <div className="flex">
-                      <div className="h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5">
-                        <img
-                          src={meal.image || "/placeholder.svg"}
-                          alt={meal.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="flex flex-1 flex-col justify-between p-3">
-                        <div>
-                          <span className="text-xs font-medium text-accent">{meal.type}</span>
-                          <h3 className="font-medium text-white">{meal.name}</h3>
-                          {meal.description ? (
-                            <p className="text-xs text-white/60">{meal.description}</p>
-                          ) : null}
+          {isLoading ? (
+            <MealsListSkeleton />
+          ) : (
+            <div className="space-y-3">
+              {tomorrowMeals.length === 0 ? (
+                <p className="text-sm text-white/60">Creating a fresh plan for tomorrow...</p>
+              ) : (
+                tomorrowMeals.map((meal) => (
+                  <Card
+                    key={`tomorrow-${meal.type}`}
+                    className="overflow-hidden border-white/10 bg-black/40 backdrop-blur-sm"
+                  >
+                    <CardContent className="p-0">
+                      <div className="flex">
+                        <div className="h-24 w-24 flex-shrink-0 overflow-hidden bg-white/5">
+                          <img
+                            src={meal.image || "/placeholder.svg"}
+                            alt={meal.name}
+                            className="h-full w-full object-cover"
+                          />
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-white/70">{meal.calories} kcal</span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => openSwapModal(meal)}
-                              className="flex items-center justify-center w-8 h-8 rounded-full bg-accent/20 hover:bg-accent/30 transition-all group"
-                              title="Swap this meal"
-                              type="button"
-                            >
-                              <RotateCcw className="h-4 w-4 text-accent group-hover:rotate-180 transition-transform duration-300" />
-                            </button>
-                            <ChevronRight className="h-4 w-4 text-white/40" />
+                        <div className="flex flex-1 flex-col justify-between p-3">
+                          <div>
+                            <span className="text-xs font-medium text-accent">{meal.type}</span>
+                            <h3 className="font-medium text-white">{meal.name}</h3>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-white/70">{meal.calories} kcal</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => openSwapModal(meal)}
+                                className="flex items-center justify-center w-8 h-8 rounded-full bg-accent/20 hover:bg-accent/30 transition-all group"
+                                title="Swap this meal"
+                                type="button"
+                              >
+                                <RotateCcw className="h-4 w-4 text-accent group-hover:rotate-180 transition-transform duration-300" />
+                              </button>
+                              <ChevronRight className="h-4 w-4 text-white/40" />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
         </motion.div>
 
         <div className="flex gap-3 mb-6 animate-in fade-in slide-in-from-bottom-2 duration-200 delay-150">
@@ -378,7 +421,7 @@ export function NutritionClient({
             variant="outline-glow"
             className="flex-1"
             onClick={handleRefreshPlan}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isLoading}
             type="button"
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /> {isRefreshing ? "Refreshing..." : "Refresh Plan"}
@@ -398,44 +441,52 @@ export function NutritionClient({
                 <span className="text-2xl">💊</span>
               </div>
 
-              <div className="space-y-2">
-                {supplements.length === 0 ? (
-                  <p className="text-sm text-white/70">Supplement guidance coming soon.</p>
-                ) : (
-                  supplements.map((supplement) => {
-                    const isVitalFlow = supplement.name === "Vital Flow" || supplement.featured
-                    
-                    if (isVitalFlow) {
+              {isLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {supplements.length === 0 ? (
+                    <p className="text-sm text-white/70">Supplement guidance coming soon.</p>
+                  ) : (
+                    supplements.map((supplement) => {
+                      const isVitalFlow = supplement.name === "Vital Flow" || supplement.featured
+                      
+                      if (isVitalFlow) {
+                        return (
+                          <button
+                            key={supplement.id}
+                            type="button"
+                            onClick={() => setIsVitalFlowModalOpen(true)}
+                            className="flex w-full items-center justify-between rounded-lg bg-black/30 p-3 text-left transition-all hover:bg-black/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            <div>
+                              <p className="font-medium text-white">{supplement.name}</p>
+                              <p className="text-xs text-white/60">{supplement.category}</p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-accent" aria-hidden />
+                          </button>
+                        )
+                      }
+                      
                       return (
-                        <button
+                        <div
                           key={supplement.id}
-                          type="button"
-                          onClick={() => setIsVitalFlowModalOpen(true)}
-                          className="flex w-full items-center justify-between rounded-lg bg-black/30 p-3 text-left transition-all hover:bg-black/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          className="flex w-full items-center justify-between rounded-lg bg-black/30 p-3"
                         >
                           <div>
                             <p className="font-medium text-white">{supplement.name}</p>
                             <p className="text-xs text-white/60">{supplement.category}</p>
                           </div>
-                          <ChevronRight className="h-4 w-4 text-accent" aria-hidden />
-                        </button>
-                      )
-                    }
-                    
-                    return (
-                      <div
-                        key={supplement.id}
-                        className="flex w-full items-center justify-between rounded-lg bg-black/30 p-3"
-                      >
-                        <div>
-                          <p className="font-medium text-white">{supplement.name}</p>
-                          <p className="text-xs text-white/60">{supplement.category}</p>
                         </div>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -461,4 +512,3 @@ export function NutritionClient({
     </div>
   )
 }
-

@@ -1,21 +1,11 @@
 import { NutritionClient } from "./NutritionClient"
-import { getDailyMealPlan, getNutritionTargets, getRecommendedSupplements } from "@/lib/actions/nutrition"
 
-export default async function NutritionPage() {
-  const [dailyPlan, targets, supplements] = await Promise.all([
-    getDailyMealPlan(),
-    getNutritionTargets(),
-    getRecommendedSupplements(3),
-  ])
-
-  return (
-    <NutritionClient
-      meals={dailyPlan.meals}
-      totals={dailyPlan.totals}
-      macros={targets.macros}
-      supplements={supplements}
-      tomorrowMeals={dailyPlan.tomorrowMeals}
-    />
-  )
+/**
+ * Nutrition page - now a lightweight client component
+ * 
+ * Data is fetched client-side using the useNutritionData hook,
+ * eliminating server-side blocking and enabling instant navigation.
+ */
+export default function NutritionPage() {
+  return <NutritionClient />
 }
-

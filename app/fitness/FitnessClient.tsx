@@ -8,39 +8,35 @@ import { BottomNav } from "@/components/bottom-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { ButtonGlow } from "@/components/ui/button-glow"
 import { useAppData } from "@/lib/contexts/app-data-context"
-import type { ActiveWorkoutPayload, WorkoutOverview } from "@/lib/actions/workouts"
+import { useFitnessData } from "@/hooks/use-fitness-data"
+import { Skeleton } from "@/components/ui/skeleton-loaders"
 
-interface ProgrammingContext {
-  dayName: string
-  emphasis: string
-  weekPhase: string
-  isSunday: boolean
-}
-
-interface FitnessClientProps {
-  activeWorkout: ActiveWorkoutPayload | null
-  overview: WorkoutOverview
-  programmingContext: ProgrammingContext
-}
-
-export function FitnessClient({ activeWorkout, overview, programmingContext }: FitnessClientProps) {
+export function FitnessClient() {
   const router = useRouter()
   
-  // Get user name from cached app data
+  // Get user name from cached app data (instant)
   const { appData } = useAppData()
   const userName = useMemo(() => {
     if (!appData?.profile?.name) return "there"
     return appData.profile.name.split(" ")[0]
   }, [appData?.profile?.name])
 
+  // Fetch fitness-specific data client-side
+  const { data, isLoading } = useFitnessData()
+
+  const activeWorkout = data?.activeWorkout ?? null
+  const overview = data?.overview
+  const programmingContext = data?.programmingContext
+
   const weeklyHighlights = useMemo(() => {
+    if (!overview) return { workouts: 0, volume: 0, cardioMinutes: 0 }
     const latestWeek = overview.weeklyWorkoutData.at(-1)
     return {
       workouts: latestWeek?.workouts || 0,
       volume: latestWeek ? Math.round(latestWeek.volume) : 0,
       cardioMinutes: latestWeek?.cardioMinutes || 0,
     }
-  }, [overview.weeklyWorkoutData])
+  }, [overview])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-charcoal pb-20">
@@ -78,21 +74,37 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
         >
           <Card className="border-accent/20 bg-gradient-to-br from-accent/10 to-transparent">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
-                    <Sparkles className="h-5 w-5 text-accent" />
+              {isLoading || !programmingContext ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-5 w-32" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-white/60">{programmingContext.dayName}</p>
-                    <p className="text-white font-semibold">{programmingContext.emphasis}</p>
+                  <div className="text-right space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-20" />
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-white/40">Week Phase</p>
-                  <p className="text-sm text-accent font-medium">{programmingContext.weekPhase}</p>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
+                      <Sparkles className="h-5 w-5 text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-white/60">{programmingContext.dayName}</p>
+                      <p className="text-white font-semibold">{programmingContext.emphasis}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-white/40">Week Phase</p>
+                    <p className="text-sm text-accent font-medium">{programmingContext.weekPhase}</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -106,19 +118,31 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
           <Card className="border-white/10 bg-black/50 text-center">
             <CardContent className="p-3">
               <p className="text-xs text-white/60">This Week</p>
-              <p className="text-xl font-bold text-white">{weeklyHighlights.workouts}</p>
+              {isLoading ? (
+                <Skeleton className="h-7 w-8 mx-auto mt-1" />
+              ) : (
+                <p className="text-xl font-bold text-white">{weeklyHighlights.workouts}</p>
+              )}
             </CardContent>
           </Card>
           <Card className="border-white/10 bg-black/50 text-center">
             <CardContent className="p-3">
               <p className="text-xs text-white/60">Volume</p>
-              <p className="text-xl font-bold text-white">{weeklyHighlights.volume}</p>
+              {isLoading ? (
+                <Skeleton className="h-7 w-12 mx-auto mt-1" />
+              ) : (
+                <p className="text-xl font-bold text-white">{weeklyHighlights.volume}</p>
+              )}
             </CardContent>
           </Card>
           <Card className="border-white/10 bg-black/50 text-center">
             <CardContent className="p-3">
               <p className="text-xs text-white/60">Cardio</p>
-              <p className="text-xl font-bold text-white">{weeklyHighlights.cardioMinutes}m</p>
+              {isLoading ? (
+                <Skeleton className="h-7 w-10 mx-auto mt-1" />
+              ) : (
+                <p className="text-xl font-bold text-white">{weeklyHighlights.cardioMinutes}m</p>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -129,10 +153,17 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
               <Calendar className="h-4 w-4 text-accent" />
               <p className="text-sm text-white/70">Ops this week</p>
             </div>
-            <div className="space-y-1 text-sm text-white/80">
-              <p>Total workouts this month: {overview.totalWorkoutsThisMonth}</p>
-              <p>Avg weekly sessions: {overview.avgWorkoutsPerWeek}</p>
-            </div>
+            {isLoading || !overview ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+            ) : (
+              <div className="space-y-1 text-sm text-white/80">
+                <p>Total workouts this month: {overview.totalWorkoutsThisMonth}</p>
+                <p>Avg weekly sessions: {overview.avgWorkoutsPerWeek}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -146,7 +177,33 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
               View Plan
             </ButtonGlow>
           </div>
-          {programmingContext.isSunday ? (
+          
+          {isLoading ? (
+            <Card className="border-white/10 bg-black/60">
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-4 w-12" />
+                </div>
+                <Skeleton className="h-6 w-48 rounded-lg" />
+                <div className="space-y-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex justify-between py-2 border-b border-white/5 last:border-0">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                  ))}
+                </div>
+                <Skeleton className="h-10 w-full rounded-md" />
+              </CardContent>
+            </Card>
+          ) : programmingContext?.isSunday ? (
             <Card className="border-white/10 bg-black/60">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-3">
@@ -190,7 +247,7 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
                   {/* AI Badge */}
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 rounded-lg w-fit">
                     <Sparkles className="h-3.5 w-3.5 text-accent" />
-                    <span className="text-xs text-accent font-medium">AI-Generated for {programmingContext.dayName}</span>
+                    <span className="text-xs text-accent font-medium">AI-Generated for {programmingContext?.dayName}</span>
                   </div>
 
                   {/* Exercises Preview */}
@@ -245,20 +302,28 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
               <Target className="h-4 w-4 text-accent" />
               Recent Performance
             </h3>
-            <ul className="space-y-1 text-sm text-white/70">
-              <li>
-                Workout change: {overview.workoutChange >= 0 ? "+" : ""}
-                {overview.workoutChange.toFixed(1)}%
-              </li>
-              <li>
-                Volume change: {overview.volumeChange >= 0 ? "+" : ""}
-                {overview.volumeChange.toFixed(1)}%
-              </li>
-              <li>
-                Cardio change: {overview.cardioChange >= 0 ? "+" : ""}
-                {overview.cardioChange.toFixed(1)}%
-              </li>
-            </ul>
+            {isLoading || !overview ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-28" />
+              </div>
+            ) : (
+              <ul className="space-y-1 text-sm text-white/70">
+                <li>
+                  Workout change: {overview.workoutChange >= 0 ? "+" : ""}
+                  {overview.workoutChange.toFixed(1)}%
+                </li>
+                <li>
+                  Volume change: {overview.volumeChange >= 0 ? "+" : ""}
+                  {overview.volumeChange.toFixed(1)}%
+                </li>
+                <li>
+                  Cardio change: {overview.cardioChange >= 0 ? "+" : ""}
+                  {overview.cardioChange.toFixed(1)}%
+                </li>
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -267,4 +332,3 @@ export function FitnessClient({ activeWorkout, overview, programmingContext }: F
     </div>
   )
 }
-
