@@ -1,0 +1,292 @@
+"use client"
+
+import { useEffect, useCallback } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { X, Mic, MicOff, Loader2, Volume2, Wifi, WifiOff } from "lucide-react"
+import { useGeminiLive, type LiveVoiceState } from "@/hooks/use-gemini-live"
+import type { GeminiVoiceName } from "@/lib/types"
+import { cn } from "@/lib/utils"
+
+interface VoiceLiveModalProps {
+  isOpen: boolean
+  onClose: () => void
+  voice?: GeminiVoiceName
+}
+
+export function VoiceLiveModal({
+  isOpen,
+  onClose,
+  voice = "Kore",
+}: VoiceLiveModalProps) {
+  const {
+    state,
+    transcript,
+    response,
+    error,
+    connect,
+    disconnect,
+    startListening,
+    stopListening,
+  } = useGeminiLive({
+    voice,
+    systemInstruction: `You are VBot, a friendly AI fitness coach for V-Life. 
+Keep responses very brief - 1-2 sentences maximum. 
+Be conversational, encouraging, and supportive.
+Speak naturally as if having a real conversation.`,
+  })
+
+  // Connect when modal opens
+  useEffect(() => {
+    if (isOpen && state === 'disconnected') {
+      connect()
+    }
+  }, [isOpen, state, connect])
+
+  // Disconnect when modal closes
+  useEffect(() => {
+    if (!isOpen && state !== 'disconnected') {
+      disconnect()
+    }
+  }, [isOpen, state, disconnect])
+
+  const handleClose = useCallback(() => {
+    stopListening()
+    disconnect()
+    onClose()
+  }, [stopListening, disconnect, onClose])
+
+  const handleMicToggle = useCallback(async () => {
+    if (state === 'listening') {
+      stopListening()
+    } else if (state === 'idle') {
+      await startListening()
+    }
+  }, [state, startListening, stopListening])
+
+  const getStateConfig = (currentState: LiveVoiceState) => {
+    switch (currentState) {
+      case 'connecting':
+        return {
+          icon: Loader2,
+          label: 'Connecting...',
+          color: 'from-blue-500 to-blue-600',
+          animate: true,
+        }
+      case 'listening':
+        return {
+          icon: Mic,
+          label: 'Listening...',
+          color: 'from-green-500 to-emerald-600',
+          animate: false,
+        }
+      case 'responding':
+        return {
+          icon: Volume2,
+          label: 'Speaking...',
+          color: 'from-accent to-yellow-600',
+          animate: false,
+        }
+      case 'error':
+        return {
+          icon: WifiOff,
+          label: 'Error',
+          color: 'from-red-500 to-red-600',
+          animate: false,
+        }
+      case 'idle':
+        return {
+          icon: Mic,
+          label: 'Tap to speak',
+          color: 'from-white/20 to-white/10',
+          animate: false,
+        }
+      default:
+        return {
+          icon: Wifi,
+          label: 'Disconnected',
+          color: 'from-gray-500 to-gray-600',
+          animate: false,
+        }
+    }
+  }
+
+  const config = getStateConfig(state)
+  const Icon = config.icon
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {/* Background effects */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -left-[25%] -top-[25%] h-[50%] w-[50%] rounded-full bg-accent/10 blur-[120px]" />
+            <div className="absolute -bottom-[25%] -right-[25%] h-[50%] w-[50%] rounded-full bg-green-500/10 blur-[120px]" />
+          </div>
+
+          {/* Close button */}
+          <motion.button
+            className="absolute right-6 top-6 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+            onClick={handleClose}
+            whileTap={{ scale: 0.9 }}
+          >
+            <X className="h-6 w-6" />
+          </motion.button>
+
+          {/* Connection status */}
+          <div className="absolute left-6 top-6 flex items-center gap-2">
+            <div className={cn(
+              "h-2 w-2 rounded-full",
+              state === 'disconnected' || state === 'error' ? "bg-red-500" :
+              state === 'connecting' ? "bg-yellow-500 animate-pulse" :
+              "bg-green-500"
+            )} />
+            <span className="text-xs text-white/50">
+              {state === 'disconnected' ? 'Disconnected' :
+               state === 'connecting' ? 'Connecting...' :
+               state === 'error' ? 'Error' :
+               'Connected'}
+            </span>
+          </div>
+
+          {/* Main content */}
+          <div className="relative z-10 flex h-full w-full max-w-md flex-col items-center justify-center px-6 py-12">
+            
+            {/* Voice Orb */}
+            <motion.button
+              onClick={handleMicToggle}
+              disabled={state === 'connecting' || state === 'responding' || state === 'disconnected'}
+              className={cn(
+                "relative mb-12 flex h-40 w-40 items-center justify-center rounded-full bg-gradient-to-br shadow-2xl transition-all",
+                config.color,
+                (state === 'connecting' || state === 'responding' || state === 'disconnected') && "opacity-50 cursor-not-allowed"
+              )}
+              whileTap={{ scale: 0.95 }}
+              animate={{
+                scale: state === 'listening' ? [1, 1.05, 1] : 1,
+              }}
+              transition={{
+                scale: {
+                  duration: 1.5,
+                  repeat: state === 'listening' ? Infinity : 0,
+                  ease: "easeInOut",
+                },
+              }}
+            >
+              {/* Pulsing rings for listening */}
+              {state === 'listening' && (
+                <>
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-green-400"
+                    initial={{ scale: 0.8, opacity: 0.6 }}
+                    animate={{ scale: 1.4, opacity: 0 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                  />
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-green-400"
+                    initial={{ scale: 0.8, opacity: 0.6 }}
+                    animate={{ scale: 1.4, opacity: 0 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: 0.5 }}
+                  />
+                </>
+              )}
+
+              {/* Icon */}
+              {config.animate ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <Icon className="h-16 w-16 text-white drop-shadow-lg" />
+                </motion.div>
+              ) : (
+                <Icon className="h-16 w-16 text-white drop-shadow-lg" />
+              )}
+            </motion.button>
+
+            {/* State label */}
+            <motion.p
+              key={state}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8 text-xl font-semibold text-white"
+            >
+              {config.label}
+            </motion.p>
+
+            {/* Live transcript */}
+            <div className="w-full flex-1 space-y-4 overflow-y-auto">
+              {/* User transcript */}
+              <AnimatePresence>
+                {transcript && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                  >
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/40">
+                      You
+                    </p>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
+                      <p className="text-sm leading-relaxed text-white">{transcript}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* AI response */}
+              <AnimatePresence>
+                {response && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                  >
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-accent/70">
+                      VBot
+                    </p>
+                    <div className="rounded-xl border border-accent/20 bg-accent/5 p-3 backdrop-blur-sm">
+                      <p className="text-sm leading-relaxed text-white">{response}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Error message */}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                  >
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 backdrop-blur-sm">
+                      <p className="text-sm leading-relaxed text-red-400">{error}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Instructions */}
+            <div className="mt-8 text-center">
+              <p className="text-sm text-white/50">
+                {state === 'idle' && "Tap the orb to start speaking"}
+                {state === 'listening' && "Speak naturally - I'm listening in real-time"}
+                {state === 'responding' && "I'm responding..."}
+                {state === 'connecting' && "Setting up voice connection..."}
+              </p>
+              <p className="mt-2 text-xs text-white/30">
+                Real-time voice powered by Gemini Live API
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}

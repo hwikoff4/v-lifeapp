@@ -138,8 +138,15 @@ export function useVoiceConversation({
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const currentConversationId = conversationIdRef.current
 
-      // Build message history
+      // Build message history with voice mode instruction for shorter responses
+      // Voice responses need to be brief (1-2 sentences) for natural conversation
+      const voiceInstruction = {
+        role: "system" as const,
+        content: "IMPORTANT: This is a VOICE conversation. Keep responses very brief - 1-2 sentences maximum. Be conversational and concise. No bullet points or long explanations."
+      }
+      
       const messageHistory = [
+        voiceInstruction,
         ...messages,
         { role: "user" as const, content: userMessage }
       ]

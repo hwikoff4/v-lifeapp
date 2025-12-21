@@ -10,7 +10,7 @@ import { ButtonGlow } from "@/components/ui/button-glow"
 import { BottomNav } from "@/components/bottom-nav"
 import { cn } from "@/lib/utils"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { VoiceChatButton, VoicePlayback, VoiceConversationModal } from "@/components/voice"
+import { VoiceChatButton, VoicePlayback, VoiceConversationModal, VoiceLiveModal } from "@/components/voice"
 import type { VoicePreferences, GeminiVoiceName } from "@/lib/types"
 
 interface Message {
@@ -724,14 +724,11 @@ export default function VBotPage() {
         </div>
       </div>
 
-      {/* Voice Conversation Modal */}
-      <VoiceConversationModal
+      {/* Voice Live Modal - Real-time streaming voice */}
+      <VoiceLiveModal
         isOpen={showVoiceModal}
         onClose={() => setShowVoiceModal(false)}
         voice={voicePrefs.selectedVoice}
-        conversationId={conversationId}
-        onConversationIdChange={setConversationId}
-        onMessagesUpdate={handleVoiceMessagesUpdate}
       />
 
       <BottomNav />
