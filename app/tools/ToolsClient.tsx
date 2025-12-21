@@ -75,9 +75,9 @@ export function ToolsClient({ weightEntries, progressPhotos, supplements, habits
         previews.push({
           id: photo.id,
           date: photo.taken_at || photo.created_at || "",
-          weight: photo.weight,
-          note: photo.note,
-          type: photo.photo_type,
+          weight: (photo as any).weight || null,
+          note: photo.notes || null,
+          type: (photo as any).photo_type || null,
           imageUrl: displayUrl,
         })
       }

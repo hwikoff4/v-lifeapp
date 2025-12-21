@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient, getAuthUser } from "@/lib/supabase/server"
+import type { WorkoutTemplate } from "@/lib/workout-programming"
 import { env } from "@/lib/env"
 import {
   getDayName,
@@ -409,17 +410,20 @@ export async function getActiveWorkout(): Promise<ActiveWorkoutPayload | null> {
 
   if (!exercises) return null
 
-  const formatted: WorkoutExerciseDetail[] = exercises.map((exercise) => ({
-    workoutExerciseId: exercise.id,
-    exerciseId: exercise.exercise_id,
-    name: exercise.exercises?.name || "Exercise",
-    category: exercise.exercises?.category || null,
-    sets: exercise.sets || 0,
-    reps: exercise.reps || "",
-    restSeconds: exercise.rest_seconds || 60,
-    completed: exercise.completed ?? false,
-    completedSets: exercise.completed_sets || 0,
-  }))
+  const formatted: WorkoutExerciseDetail[] = exercises.map((exercise) => {
+    const exerciseData = Array.isArray(exercise.exercises) ? exercise.exercises[0] : exercise.exercises
+    return {
+      workoutExerciseId: exercise.id,
+      exerciseId: exercise.exercise_id,
+      name: exerciseData?.name || "Exercise",
+      category: exerciseData?.category || null,
+      sets: exercise.sets || 0,
+      reps: exercise.reps || "",
+      restSeconds: exercise.rest_seconds || 60,
+      completed: exercise.completed ?? false,
+      completedSets: exercise.completed_sets || 0,
+    }
+  })
 
   // Extract conditioning notes from description if present
   const descriptionParts = workout.description?.split(": ") || []
@@ -711,8 +715,9 @@ async function buildDailyCompletion(userId: string, supabase: Awaited<ReturnType
     day.setDate(start.getDate() + i)
     const label = day.toLocaleDateString(undefined, { weekday: "short" })
     const stats = { day: label, completed: 0, total: 0 }
-    ;(data || []).forEach((exercise) => {
-      const exerciseDate = new Date(exercise.created_at || exercise.workouts?.created_at || "")
+    ;(data || []).forEach((exercise: any) => {
+      const workout = Array.isArray(exercise.workouts) ? exercise.workouts[0] : exercise.workouts
+      const exerciseDate = new Date(exercise.created_at || workout?.created_at || "")
       if (
         exerciseDate.getFullYear() === day.getFullYear() &&
         exerciseDate.getMonth() === day.getMonth() &&

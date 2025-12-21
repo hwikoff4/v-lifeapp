@@ -23,9 +23,9 @@ interface DailyMeal {
   eatenAt: string | null
 }
 
-const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
+const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at"> & { description?: string; recipe?: string | null }> = [
   {
-    meal_type: "Breakfast",
+    meal_type: "breakfast",
     name: "Protein Oatmeal Bowl",
     description: "Rolled oats, whey protein, blueberries, almond butter",
     calories: 420,
@@ -36,7 +36,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Breakfast",
+    meal_type: "breakfast",
     name: "Greek Yogurt Parfait",
     description: "Greek yogurt with berries and granola",
     calories: 350,
@@ -47,7 +47,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Lunch",
+    meal_type: "lunch",
     name: "Grilled Chicken Salad",
     description: "Mixed greens, grilled chicken, quinoa, avocado",
     calories: 550,
@@ -58,7 +58,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Lunch",
+    meal_type: "lunch",
     name: "Turkey Quinoa Bowl",
     description: "Lean turkey, quinoa, roasted veggies, tahini",
     calories: 520,
@@ -69,7 +69,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Dinner",
+    meal_type: "dinner",
     name: "Salmon with Vegetables",
     description: "Grilled salmon, asparagus, sweet potato mash",
     calories: 620,
@@ -80,7 +80,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Dinner",
+    meal_type: "dinner",
     name: "Lean Beef Stir-Fry",
     description: "Sirloin, bell peppers, broccoli, jasmine rice",
     calories: 600,
@@ -91,7 +91,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Snack",
+    meal_type: "snack",
     name: "Greek Yogurt with Berries",
     description: "Non-fat yogurt, mixed berries, chia seeds",
     calories: 180,
@@ -102,7 +102,7 @@ const DEFAULT_MEALS: Array<Omit<Meal, "id" | "user_id" | "created_at">> = [
     recipe: null,
   },
   {
-    meal_type: "Snack",
+    meal_type: "snack",
     name: "Protein Shake",
     description: "Whey protein, almond milk, banana, peanut butter",
     calories: 250,
@@ -189,18 +189,19 @@ function buildMacroTargets(profile?: ProfileInfo): Macros {
 
 function selectFallbackMeals(missingTypes: MealType[]): GeneratedMeal[] {
   return missingTypes.map((type) => {
-    const pool = DEFAULT_MEALS.filter((meal) => meal.meal_type === type)
+    const normalizedType = type.toLowerCase() as "breakfast" | "lunch" | "dinner" | "snack"
+    const pool = DEFAULT_MEALS.filter((meal) => meal.meal_type === normalizedType)
     const candidate =
-      pool[Math.floor(Math.random() * pool.length)] ?? DEFAULT_MEALS.find((meal) => meal.meal_type === type) ?? DEFAULT_MEALS[0]
+      pool[Math.floor(Math.random() * pool.length)] ?? DEFAULT_MEALS.find((meal) => meal.meal_type === normalizedType) ?? DEFAULT_MEALS[0]
 
     return {
       type,
       name: candidate.name,
-      description: candidate.description,
-      calories: candidate.calories,
-      protein: candidate.protein,
-      carbs: candidate.carbs,
-      fat: candidate.fat,
+      description: candidate.description ?? null,
+      calories: candidate.calories ?? 0,
+      protein: candidate.protein ?? 0,
+      carbs: candidate.carbs ?? 0,
+      fat: candidate.fat ?? 0,
       image: getMealImage(candidate.name),
     }
   })
@@ -374,7 +375,7 @@ async function persistGeneratedMeals(
     user_id: userId,
     meal_type: meal.type,
     name: meal.name,
-    description: meal.description,
+    description: (meal as any).description ?? null,
     calories: Math.round(meal.calories || 0),
     protein: Number(meal.protein ?? 0),
     carbs: Number(meal.carbs ?? 0),
@@ -502,19 +503,21 @@ async function fetchMealsForDate(
 
   for (const log of sortedLogs) {
     if (!log.meals) continue
-    const type = (log.meal_type as MealType) || (log.meals.meal_type as MealType)
+    const meal = Array.isArray(log.meals) ? log.meals[0] : log.meals
+    if (!meal) continue
+    const type = (log.meal_type as MealType) || (meal.meal_type as MealType)
     if (!type || mealMap.has(type)) continue
 
     mealMap.set(type, {
       logId: log.id,
-      mealId: log.meals.id,
+      mealId: meal.id,
       type,
-      name: log.meals.name,
-      calories: Number(log.meals.calories || 0),
-      protein: Number(log.meals.protein || 0),
-      carbs: Number(log.meals.carbs || 0),
-      fat: Number(log.meals.fat || 0),
-      image: log.meals.image_url || getMealImage(log.meals.name),
+      name: meal.name,
+      calories: Number(meal.calories || 0),
+      protein: Number(meal.protein || 0),
+      carbs: Number(meal.carbs || 0),
+      fat: Number(meal.fat || 0),
+      image: meal.image_url || getMealImage(meal.name),
       isEaten: Boolean(log.is_eaten),
       eatenAt: log.eaten_at || null,
     })
@@ -677,7 +680,7 @@ export async function getMealAlternatives(mealType: MealType, excludeMealId?: st
     id: meal.id,
     name: meal.name,
     calories: meal.calories || 0,
-    description: meal.description,
+    description: (meal as any).description || null,
   }))
 }
 

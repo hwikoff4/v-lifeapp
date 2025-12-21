@@ -256,14 +256,17 @@ async function fetchMealsWithIngredients(
   if (!mealLogs) return []
 
   return mealLogs
-    .filter((log) => log.meals)
-    .map((log) => ({
-      id: log.meals.id,
-      name: log.meals.name,
-      meal_type: log.meals.meal_type,
-      ingredients: log.meals.ingredients,
-      consumed_at: log.consumed_at,
-    }))
+    .filter((log) => log.meals && !Array.isArray(log.meals))
+    .map((log) => {
+      const meal = Array.isArray(log.meals) ? log.meals[0] : log.meals
+      return {
+        id: meal.id,
+        name: meal.name,
+        meal_type: meal.meal_type,
+        ingredients: meal.ingredients,
+        consumed_at: log.consumed_at,
+      }
+    })
 }
 
 // Sync grocery list with meals - pulls from today/tomorrow and uses AI for 7-day forecast

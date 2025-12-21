@@ -112,7 +112,7 @@ export default function VBotPage() {
         console.error("Error loading messages:", error)
         setError("Failed to load conversation")
       } else {
-        setMessages((data || []).map(m => ({
+        setMessages((data || []).map((m: any) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
           content: m.content,

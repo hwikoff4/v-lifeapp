@@ -19,6 +19,13 @@ import { FoodLogHistory } from "@/components/food-logging"
 import type { DailyMeal } from "@/lib/actions/nutrition"
 import { cn } from "@/lib/utils"
 
+interface MealOption {
+  id: string
+  name: string
+  calories: number
+  description?: string | null
+}
+
 interface MealAlternative {
   id: string
   name: string
@@ -164,7 +171,7 @@ export function NutritionClient() {
     }
   }
 
-  const handleMealSwap = async (newMeal: MealAlternative) => {
+  const handleMealSwap = async (newMeal: MealOption) => {
     if (!selectedMealForSwap) return
     try {
       const { swapMeal } = await import("@/lib/actions/nutrition")

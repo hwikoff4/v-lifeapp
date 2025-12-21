@@ -7,9 +7,10 @@ import { ButtonGlow } from "@/components/ui/button-glow"
 import { Card, CardContent } from "@/components/ui/card"
 
 interface MealOption {
+  id: string
   name: string
   calories: number
-  description?: string
+  description?: string | null
 }
 
 interface MealSwapModalProps {
