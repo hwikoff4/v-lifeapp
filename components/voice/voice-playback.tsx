@@ -37,18 +37,35 @@ export function VoicePlayback({
     try {
       setIsLoading(true)
       setHasError(false)
+      
+      console.log("[VoicePlayback] Fetching TTS for text:", text.slice(0, 50))
+      console.log("[VoicePlayback] Starting fetch request...")
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        console.log("[VoicePlayback] Request timeout after 30s")
+        controller.abort()
+      }, 30000)
 
       const response = await fetch("/api/vbot-tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice }),
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
+      console.log("[VoicePlayback] Response received, status:", response.status)
+
       if (!response.ok) {
-        throw new Error("TTS request failed")
+        const errorText = await response.text()
+        console.error("[VoicePlayback] TTS response error:", response.status, errorText)
+        throw new Error(`TTS request failed: ${response.status}`)
       }
 
+      console.log("[VoicePlayback] Reading blob...")
       const blob = await response.blob()
+      console.log("[VoicePlayback] TTS audio received, type:", blob.type, "size:", blob.size)
       setAudioBlob(blob)
       return blob
     } catch (err) {
@@ -90,14 +107,18 @@ export function VoicePlayback({
     }
   }, [fetchAudio, play])
 
-  // Auto-play on mount if enabled
+  // Auto-play when autoPlay becomes true (e.g., after streaming completes)
   useEffect(() => {
     if (autoPlay && text) {
-      handlePlay()
+      console.log("[VoicePlayback] Auto-play triggered, text length:", text.length)
+      // Small delay to ensure all state is settled
+      const timer = setTimeout(() => {
+        handlePlay()
+      }, 100)
+      return () => clearTimeout(timer)
     }
-    // Only run on mount or when autoPlay/text changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlay])
+  }, [autoPlay, text])
 
   // Notify when playback ends
   useEffect(() => {

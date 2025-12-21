@@ -103,6 +103,17 @@ export function FoodLogHistory({
 
   // Handle parsed food result
   const handleParseComplete = useCallback((result: FoodParseResult, input: string, inputType: "text" | "voice" | "image") => {
+    console.log("[FoodLogHistory] handleParseComplete called:", {
+      success: result.success,
+      foodsCount: result.foods?.length || 0,
+      hasFoods: !!result.foods && result.foods.length > 0
+    })
+    
+    if (!result.foods || result.foods.length === 0) {
+      console.error("[FoodLogHistory] No foods in result:", result)
+      return
+    }
+    
     setPendingParseResult(result)
     setPendingInput({ text: input, type: inputType })
     setShowConfirmModal(true)

@@ -74,7 +74,10 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
 
   const play = useCallback(async (audioSource: string | Blob) => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio) {
+      console.error("[AudioPlayer] No audio element")
+      return
+    }
 
     try {
       setError(null)
@@ -88,15 +91,19 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
 
       // Set source based on type
       if (audioSource instanceof Blob) {
+        console.log("[AudioPlayer] Playing blob, type:", audioSource.type, "size:", audioSource.size)
         objectUrlRef.current = URL.createObjectURL(audioSource)
         audio.src = objectUrlRef.current
       } else {
+        console.log("[AudioPlayer] Playing URL:", audioSource.slice(0, 50))
         audio.src = audioSource
       }
 
       // Load and play
       await audio.load()
+      console.log("[AudioPlayer] Audio loaded, playing...")
       await audio.play()
+      console.log("[AudioPlayer] Playback started")
     } catch (err) {
       console.error("[AudioPlayer] Play error:", err)
       setError("Failed to play audio")

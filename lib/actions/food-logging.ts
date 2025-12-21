@@ -82,8 +82,13 @@ export async function parseFood(
   mealTypeOverride?: string,
   dateOverride?: string
 ): Promise<FoodParseResult> {
+  console.log("[FoodLogging] parseFood called with input:", input?.substring(0, 50))
+  
   const { user, error: authError } = await getAuthUser()
+  console.log("[FoodLogging] Auth check:", { hasUser: !!user, authError })
+  
   if (authError || !user) {
+    console.error("[FoodLogging] Auth failed:", authError)
     return { 
       success: false, 
       foods: [], 
@@ -99,8 +104,10 @@ export async function parseFood(
   try {
     const supabase = await createClient()
     const { data: { session } } = await supabase.auth.getSession()
+    console.log("[FoodLogging] Session check:", { hasSession: !!session, hasToken: !!session?.access_token })
     
     if (!session?.access_token) {
+      console.error("[FoodLogging] No session token")
       return { 
         success: false, 
         foods: [], 
@@ -114,7 +121,10 @@ export async function parseFood(
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    console.log("[FoodLogging] Supabase URL configured:", !!supabaseUrl)
+    
     if (!supabaseUrl) {
+      console.error("[FoodLogging] Missing NEXT_PUBLIC_SUPABASE_URL")
       return { 
         success: false, 
         foods: [], 
@@ -126,6 +136,8 @@ export async function parseFood(
         error: "Supabase URL not configured" 
       }
     }
+    
+    console.log("[FoodLogging] Making fetch request to:", `${supabaseUrl}/functions/v1/ai-food-parser`)
 
     const response = await fetch(`${supabaseUrl}/functions/v1/ai-food-parser`, {
       method: "POST",
@@ -143,9 +155,19 @@ export async function parseFood(
       }),
     })
 
+    // Read response body once
+    const responseText = await response.text()
+    console.log("[FoodLogging] Response status:", response.status, "Raw response:", responseText.substring(0, 500))
+
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error("[FoodLogging] Edge function error:", response.status, errorText)
+      console.error("[FoodLogging] Edge function error:", response.status, responseText)
+      let errorMessage = "Failed to parse food"
+      try {
+        const errorData = JSON.parse(responseText)
+        errorMessage = errorData.error || errorData.details || errorMessage
+      } catch {
+        // If we can't parse error, use default message
+      }
       return { 
         success: false, 
         foods: [], 
@@ -154,11 +176,86 @@ export async function parseFood(
         totalProtein: 0,
         totalCarbs: 0,
         totalFat: 0,
-        error: "Failed to parse food" 
+        error: errorMessage
       }
     }
 
-    const result = await response.json()
+    let result: any
+    try {
+      result = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error("[FoodLogging] JSON parse error:", parseError, "Response text:", responseText)
+      return {
+        success: false,
+        foods: [],
+        suggestedMealType: "Snack",
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        error: "Invalid response format from server"
+      }
+    }
+    
+    console.log("[FoodLogging] Parse result:", {
+      success: result.success,
+      foodsCount: result.foods?.length || 0,
+      error: result.error,
+      hasFoods: !!result.foods,
+      resultKeys: Object.keys(result || {})
+    })
+    
+    // Validate response structure
+    if (!result || typeof result !== 'object') {
+      console.error("[FoodLogging] Invalid response structure:", result)
+      return {
+        success: false,
+        foods: [],
+        suggestedMealType: "Snack",
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        error: "Invalid response from server"
+      }
+    }
+    
+    // Check if response indicates failure even with 200 status
+    if (result.success === false || result.error) {
+      const errorDetails = result.details || result.error || "Failed to parse food"
+      console.error("[FoodLogging] API returned error:", {
+        success: result.success,
+        error: result.error,
+        details: result.details,
+        fullResult: result
+      })
+      return {
+        success: false,
+        foods: [],
+        suggestedMealType: result.suggestedMealType || "Snack",
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        error: errorDetails
+      }
+    }
+    
+    // Ensure foods array exists and is valid
+    if (!Array.isArray(result.foods)) {
+      console.error("[FoodLogging] Foods is not an array:", result.foods)
+      return {
+        success: false,
+        foods: [],
+        suggestedMealType: result.suggestedMealType || "Snack",
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        error: "Invalid foods data in response"
+      }
+    }
+    
     return result as FoodParseResult
 
   } catch (error) {

@@ -62,7 +62,17 @@ export function FoodLoggerInput({
     onParseStart?.()
 
     try {
+      console.log("[FoodLogger] Calling parseFood with:", {
+        inputText: inputText.substring(0, 50),
+        inputType,
+        hasImageData: !!imageData,
+        mealTypeOverride,
+        selectedDate
+      })
+      
       const { parseFood } = await import("@/lib/actions/food-logging")
+      console.log("[FoodLogger] parseFood imported, calling...")
+      
       const result = await parseFood(
         inputText,
         inputType,
@@ -71,11 +81,25 @@ export function FoodLoggerInput({
         selectedDate
       )
 
-      if (result.success && result.foods.length > 0) {
+      console.log("[FoodLogger] Parse result received:", {
+        success: result.success,
+        foodsCount: result.foods?.length || 0,
+        error: result.error,
+        hasFoods: !!result.foods && result.foods.length > 0,
+        fullResult: result
+      })
+
+      if (result.success && result.foods && result.foods.length > 0) {
+        console.log("[FoodLogger] Calling onParseComplete with", result.foods.length, "foods")
         onParseComplete(result, inputText, inputType)
         setInput("")
         setMealTypeOverride(null)
       } else {
+        console.warn("[FoodLogger] Parse failed or no foods:", {
+          success: result.success,
+          foodsCount: result.foods?.length || 0,
+          error: result.error
+        })
         toast({
           title: "Couldn't parse food",
           description: result.error || "Try describing your food differently",
@@ -86,7 +110,7 @@ export function FoodLoggerInput({
       console.error("[FoodLogger] Parse error:", error)
       toast({
         title: "Error",
-        description: "Failed to analyze food. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to analyze food. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -253,10 +277,11 @@ export function FoodLoggerInput({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
             placeholder="What did you eat? (e.g., '2 eggs with toast and coffee')"
             rows={2}
             disabled={isProcessing || disabled}
-            className="w-full resize-none bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
+            className="relative z-10 w-full resize-none bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50 cursor-text"
           />
           
           {/* Recording indicator overlay */}
@@ -266,7 +291,7 @@ export function FoodLoggerInput({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 flex items-center justify-center bg-black/80"
+                className="absolute inset-0 z-20 flex items-center justify-center bg-black/80"
               >
                 <div className="flex items-center gap-3">
                   <motion.div
@@ -294,7 +319,7 @@ export function FoodLoggerInput({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 flex items-center justify-center bg-black/80"
+                className="absolute inset-0 z-20 flex items-center justify-center bg-black/80"
               >
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-5 w-5 animate-spin text-accent" />

@@ -72,6 +72,7 @@ Deno.serve(async (req: Request) => {
     console.log("[VBot TTS] Generating speech for:", truncatedText.slice(0, 100), "voice:", voice)
 
     // Call Google Gemini TTS API using the TTS-specific model
+    // Use query parameter for API key (as per Google REST API examples)
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${googleApiKey}`,
       {
@@ -84,7 +85,7 @@ Deno.serve(async (req: Request) => {
             {
               parts: [
                 {
-                  text: `Say in a warm, friendly coaching tone as a fitness AI assistant: ${truncatedText}`,
+                  text: truncatedText,
                 },
               ],
             },

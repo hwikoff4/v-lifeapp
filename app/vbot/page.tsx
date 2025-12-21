@@ -44,6 +44,7 @@ export default function VBotPage() {
   const [voicePrefs, setVoicePrefs] = useState<VoicePreferences>(DEFAULT_VOICE_PREFS)
   const [lastAssistantMessageId, setLastAssistantMessageId] = useState<string | null>(null)
   const [lastMessageWasVoice, setLastMessageWasVoice] = useState(false)
+  const [isStreamingComplete, setIsStreamingComplete] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -232,6 +233,7 @@ export default function VBotPage() {
         content: "",
       }])
       setLastAssistantMessageId(assistantMsgId)
+      setIsStreamingComplete(false)
 
       // Read streaming response
       const reader = response.body?.getReader()
@@ -276,6 +278,9 @@ export default function VBotPage() {
           }
         }
       }
+
+      // Mark streaming as complete - this triggers voice playback
+      setIsStreamingComplete(true)
 
       // Refresh conversations list
       loadConversations()
@@ -588,7 +593,7 @@ export default function VBotPage() {
                           <VoicePlayback
                             text={message.content}
                             voice={voicePrefs.selectedVoice}
-                            autoPlay={(voicePrefs.autoPlayResponses || lastMessageWasVoice) && message.id === lastAssistantMessageId}
+                            autoPlay={(voicePrefs.autoPlayResponses || lastMessageWasVoice) && message.id === lastAssistantMessageId && isStreamingComplete}
                             size="sm"
                           />
                         </div>

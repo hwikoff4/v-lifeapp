@@ -266,8 +266,17 @@ Deno.serve(async (req) => {
     if (!openaiApiKey) {
       console.error("[AI-Food-Parser] OPENAI_API_KEY not configured")
       return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
-        { status: 503, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          foods: [],
+          suggestedMealType: "Snack",
+          totalCalories: 0,
+          totalProtein: 0,
+          totalCarbs: 0,
+          totalFat: 0,
+          error: "AI service not configured - OPENAI_API_KEY missing in Supabase Edge Function secrets"
+        }),
+        { status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
       )
     }
 
@@ -329,14 +338,20 @@ Deno.serve(async (req) => {
     )
 
   } catch (error) {
-    console.error("[AI-Food-Parser] Error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    console.error("[AI-Food-Parser] Error:", errorMessage, error)
     return new Response(
       JSON.stringify({
         success: false,
-        error: "Failed to parse food",
-        details: error instanceof Error ? error.message : "Unknown error"
+        foods: [],
+        suggestedMealType: "Snack",
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        error: `Failed to parse food: ${errorMessage}`
       }),
-      { status: 500, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
     )
   }
 })
