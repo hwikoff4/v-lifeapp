@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { env } from "@/lib/env"
 
-// Proxy to Supabase Edge Function for TTS
-// This route forwards the text to the vbot-tts edge function which uses Google Gemini
+// Direct Gemini TTS - No Edge Function proxy for faster response
+// This eliminates one network hop and reduces latency significantly
 
 // Convert raw PCM (L16) audio to WAV format by adding a header
 function pcmToWav(pcmData: Buffer, sampleRate: number = 24000, numChannels: number = 1, bitsPerSample: number = 16): Buffer {
@@ -38,8 +38,10 @@ function pcmToWav(pcmData: Buffer, sampleRate: number = 24000, numChannels: numb
 }
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now()
+  
   try {
-    // Verify authentication and get session
+    // Verify authentication
     const supabase = await createClient()
     const { data: { session }, error: authError } = await supabase.auth.getSession()
     
@@ -47,65 +49,109 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get the request body
-    const body = await req.json()
-    
-    // Build the edge function URL
-    const edgeFunctionUrl = `${env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/vbot-tts`
+    const authTime = Date.now() - startTime
+    console.log(`[VBot TTS] Auth check: ${authTime}ms`)
 
-    // Forward the request to the edge function
-    const response = await fetch(edgeFunctionUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    })
+    // Check for Google API key
+    if (!env.GOOGLE_API_KEY) {
+      console.error("[VBot TTS] GOOGLE_API_KEY not configured")
+      return NextResponse.json({ error: "TTS service not configured" }, { status: 500 })
+    }
+
+    // Get the request body
+    const { text, voice = "Kore" } = await req.json()
+    
+    if (!text || text.trim().length === 0) {
+      return NextResponse.json({ error: "Text is required" }, { status: 400 })
+    }
+
+    // Limit text length to prevent abuse
+    const truncatedText = text.slice(0, 4000)
+    
+    console.log(`[VBot TTS] Generating speech for ${truncatedText.length} chars, voice: ${voice}`)
+
+    // Call Gemini TTS API directly (no Edge Function proxy)
+    const geminiStart = Date.now()
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${env.GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: truncatedText,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: voice,
+                },
+              },
+            },
+          },
+        }),
+      }
+    )
+
+    const geminiTime = Date.now() - geminiStart
+    console.log(`[VBot TTS] Gemini API call: ${geminiTime}ms, status: ${response.status}`)
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Edge function error" }))
-      console.error("[VBot TTS Proxy] Edge function error:", errorData)
-      return NextResponse.json(errorData, { status: response.status })
+      const errorText = await response.text()
+      console.error("[VBot TTS] Gemini API error:", errorText)
+      return NextResponse.json(
+        { error: "TTS generation failed", details: errorText },
+        { status: 500 }
+      )
     }
 
     const data = await response.json()
-    
-    // The edge function returns { audio: base64, mimeType: string }
-    // Convert to binary response for direct audio playback
-    if (data.audio) {
-      const pcmData = Buffer.from(data.audio, "base64")
-      const mimeType = data.mimeType || "audio/l16"
-      
-      // If it's raw PCM (L16), convert to WAV for browser compatibility
-      if (mimeType.includes("l16") || mimeType.includes("pcm")) {
-        console.log("[VBot TTS Proxy] Converting PCM to WAV, size:", pcmData.length)
-        const wavData = pcmToWav(pcmData)
-        return new NextResponse(wavData, {
-          status: 200,
-          headers: {
-            "Content-Type": "audio/wav",
-            "Content-Length": wavData.length.toString(),
-            "Cache-Control": "no-cache",
-          },
-        })
-      }
-      
-      // For other formats, return as-is
-      return new NextResponse(pcmData, {
-        status: 200,
-        headers: {
-          "Content-Type": mimeType,
-          "Content-Length": pcmData.length.toString(),
-          "Cache-Control": "no-cache",
-        },
-      })
+    const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data
+    const mimeType = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || "audio/l16"
+
+    if (!audioData) {
+      console.error("[VBot TTS] No audio data in response")
+      return NextResponse.json({ error: "No audio generated" }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    // Convert base64 to buffer
+    const pcmData = Buffer.from(audioData, "base64")
+    
+    // If it's raw PCM (L16), convert to WAV for browser compatibility
+    let outputData: Buffer
+    let outputMimeType: string
+    
+    if (mimeType.includes("l16") || mimeType.includes("pcm")) {
+      outputData = pcmToWav(pcmData)
+      outputMimeType = "audio/wav"
+    } else {
+      outputData = pcmData
+      outputMimeType = mimeType
+    }
+
+    const totalTime = Date.now() - startTime
+    console.log(`[VBot TTS] Complete: ${totalTime}ms total (auth: ${authTime}ms, gemini: ${geminiTime}ms), output: ${outputData.length} bytes`)
+
+    return new NextResponse(outputData, {
+      status: 200,
+      headers: {
+        "Content-Type": outputMimeType,
+        "Content-Length": outputData.length.toString(),
+        "Cache-Control": "no-cache",
+      },
+    })
   } catch (error) {
-    console.error("[VBot TTS Proxy Error]", error)
+    console.error("[VBot TTS Error]", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }

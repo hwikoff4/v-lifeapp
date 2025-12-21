@@ -14,7 +14,6 @@ interface VoiceConversationModalProps {
   conversationId?: string | null
   onConversationIdChange?: (id: string) => void
   onMessagesUpdate?: (messages: Array<{ role: "user" | "assistant"; content: string }>) => void
-  ttsMode?: 'browser' | 'gemini' // Default to 'browser' for speed
 }
 
 export function VoiceConversationModal({
@@ -24,7 +23,6 @@ export function VoiceConversationModal({
   conversationId,
   onConversationIdChange,
   onMessagesUpdate,
-  ttsMode = "browser", // Fast by default
 }: VoiceConversationModalProps) {
   const {
     state,
@@ -42,7 +40,6 @@ export function VoiceConversationModal({
     conversationId,
     onConversationIdChange,
     onMessagesUpdate,
-    ttsMode,
   })
 
   const handleClose = () => {

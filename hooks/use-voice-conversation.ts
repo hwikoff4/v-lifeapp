@@ -7,8 +7,6 @@ import type { GeminiVoiceName } from "@/lib/types"
 
 export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'error'
 
-export type TTSMode = 'browser' | 'gemini'
-
 interface Message {
   role: "user" | "assistant"
   content: string
@@ -19,7 +17,6 @@ interface UseVoiceConversationOptions {
   conversationId?: string | null
   onConversationIdChange?: (id: string) => void
   onMessagesUpdate?: (messages: Message[]) => void
-  ttsMode?: TTSMode
 }
 
 interface UseVoiceConversationReturn {
@@ -40,7 +37,6 @@ export function useVoiceConversation({
   conversationId,
   onConversationIdChange,
   onMessagesUpdate,
-  ttsMode = "browser", // Default to fast browser TTS
 }: UseVoiceConversationOptions): UseVoiceConversationReturn {
   const [state, setState] = useState<VoiceState>('idle')
   const [userTranscript, setUserTranscript] = useState("")
@@ -234,16 +230,9 @@ export function useVoiceConversation({
     }
   }
 
-  const handleTTS = async (text: string): Promise<Blob | null> => {
+  const handleTTS = async (text: string): Promise<Blob> => {
     try {
-      if (ttsMode === 'browser') {
-        // Use fast browser TTS - near instant
-        console.log(`[VoiceConversation] 🎤 Using browser TTS for ${text.length} characters`)
-        return null // Signal to use browser speech
-      }
-      
-      // Use Gemini TTS for high quality
-      console.log(`[VoiceConversation] 🎤 Using Gemini TTS for ${text.length} characters`)
+      console.log(`[VoiceConversation] 🎤 TTS request for ${text.length} characters`)
       const startFetch = Date.now()
       
       const response = await fetch("/api/vbot-tts", {
@@ -354,26 +343,7 @@ export function useVoiceConversation({
       // Play audio
       console.log("[VoiceConversation] 🔊 Playing audio...")
       const playStart = Date.now()
-      
-      if (audioBlob2) {
-        // Play Gemini TTS audio
-        await play(audioBlob2)
-      } else {
-        // Use browser speech synthesis (instant)
-        if ('speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance(response)
-          utterance.rate = 1.1 // Slightly faster for more natural conversation
-          utterance.pitch = 1.0
-          
-          // Wait for speech to complete
-          await new Promise<void>((resolve) => {
-            utterance.onend = () => resolve()
-            utterance.onerror = () => resolve()
-            window.speechSynthesis.speak(utterance)
-          })
-        }
-      }
-      
+      await play(audioBlob2)
       const playDuration = Date.now() - playStart
       
       const totalDuration = Date.now() - startTime
@@ -385,7 +355,7 @@ export function useVoiceConversation({
       setState('error')
       setError(err instanceof Error ? err.message : "Something went wrong")
     }
-  }, [state, stopRecording, messages, voice, ttsMode, onMessagesUpdate, play])
+  }, [state, stopRecording, messages, voice, onMessagesUpdate, play])
 
   const cancelConversation = useCallback(() => {
     // Abort any ongoing requests

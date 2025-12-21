@@ -12,6 +12,9 @@ const envSchema = z.object({
   // OpenAI (optional in development)
   OPENAI_API_KEY: z.string().optional(),
   
+  // Google API Key for Gemini TTS/STT
+  GOOGLE_API_KEY: z.string().optional(),
+  
   // App URL (optional - can be empty string during build)
   NEXT_PUBLIC_APP_URL: z.union([
     z.string().url(),
@@ -26,6 +29,7 @@ function validateEnv(): Env {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
     // Allow empty string for APP_URL during build
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || undefined,
   })
