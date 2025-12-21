@@ -3,14 +3,15 @@
 import type React from "react"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Loader2, Bot, UserIcon, Plus, MessageSquare, ChevronLeft, Trash2, Sparkles } from "lucide-react"
+import { Send, Loader2, Bot, UserIcon, Plus, MessageSquare, ChevronLeft, Trash2, Sparkles, Mic } from "lucide-react"
 import { useState, useRef, useEffect, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import { ButtonGlow } from "@/components/ui/button-glow"
-import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { cn } from "@/lib/utils"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { VoiceChatButton, VoicePlayback } from "@/components/voice"
+import type { VoicePreferences, GeminiVoiceName } from "@/lib/types"
 
 interface Message {
   id: string
@@ -25,6 +26,12 @@ interface Conversation {
   message_count: number
 }
 
+const DEFAULT_VOICE_PREFS: VoicePreferences = {
+  selectedVoice: "Kore",
+  voiceEnabled: true,
+  autoPlayResponses: false,
+}
+
 export default function VBotPage() {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
@@ -34,14 +41,40 @@ export default function VBotPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [loadingConversations, setLoadingConversations] = useState(false)
+  const [voicePrefs, setVoicePrefs] = useState<VoicePreferences>(DEFAULT_VOICE_PREFS)
+  const [lastAssistantMessageId, setLastAssistantMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const conversationIdRef = useRef<string | null>(null)
 
-  // Load conversations on mount
+  // Load conversations and voice preferences on mount
   useEffect(() => {
     loadConversations()
+    loadVoicePreferences()
   }, [])
+
+  const loadVoicePreferences = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("voice_preferences")
+        .eq("id", user.id)
+        .single()
+
+      if (profile?.voice_preferences) {
+        setVoicePrefs({
+          ...DEFAULT_VOICE_PREFS,
+          ...profile.voice_preferences,
+        })
+      }
+    } catch (err) {
+      console.error("Error loading voice preferences:", err)
+    }
+  }
 
   const loadConversations = async () => {
     setLoadingConversations(true)
@@ -197,6 +230,7 @@ export default function VBotPage() {
         role: "assistant",
         content: "",
       }])
+      setLastAssistantMessageId(assistantMsgId)
 
       // Read streaming response
       const reader = response.body?.getReader()
@@ -275,6 +309,13 @@ export default function VBotPage() {
     if (!input.trim() || isLoading) return
     sendMessage(input)
   }
+
+  // Handle voice transcript from speech-to-text
+  const handleVoiceTranscript = useCallback((transcript: string) => {
+    if (transcript.trim()) {
+      sendMessage(transcript)
+    }
+  }, [sendMessage])
 
   // History sidebar
   const HistorySidebar = () => (
@@ -517,14 +558,27 @@ export default function VBotPage() {
                   )}
                 >
                   {message.role === "assistant" ? (
-                    <div className="prose prose-invert prose-sm max-w-none leading-relaxed [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-2 [&_p]:last:mb-0 [&_strong]:font-bold [&_strong]:text-white [&_ul]:list-disc [&_ul]:pl-4">
-                      {message.content ? (
-                        <ReactMarkdown>{message.content}</ReactMarkdown>
-                      ) : (
-                        <span className="inline-flex items-center gap-1">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          <span className="text-white/60">Thinking...</span>
-                        </span>
+                    <div className="space-y-2">
+                      <div className="prose prose-invert prose-sm max-w-none leading-relaxed [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-2 [&_p]:last:mb-0 [&_strong]:font-bold [&_strong]:text-white [&_ul]:list-disc [&_ul]:pl-4">
+                        {message.content ? (
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span className="text-white/60">Thinking...</span>
+                          </span>
+                        )}
+                      </div>
+                      {/* Voice playback button for completed messages */}
+                      {message.content && voicePrefs.voiceEnabled && (
+                        <div className="flex items-center justify-end pt-1 border-t border-white/5">
+                          <VoicePlayback
+                            text={message.content}
+                            voice={voicePrefs.selectedVoice}
+                            autoPlay={voicePrefs.autoPlayResponses && message.id === lastAssistantMessageId}
+                            size="sm"
+                          />
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -568,6 +622,13 @@ export default function VBotPage() {
               className="flex-1 rounded-full border border-white/10 bg-white/5 px-6 py-3.5 text-sm text-white shadow-inner placeholder:text-white/30 focus:border-accent/50 focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all"
               disabled={isLoading}
             />
+            {/* Voice input button */}
+            {voicePrefs.voiceEnabled && (
+              <VoiceChatButton
+                onTranscript={handleVoiceTranscript}
+                disabled={isLoading}
+              />
+            )}
             <ButtonGlow
               type="submit"
               variant="accent-glow"
@@ -579,6 +640,13 @@ export default function VBotPage() {
             </ButtonGlow>
           </form>
           {error && <p className="mt-2 text-xs text-red-500">Error: {error}</p>}
+          {/* Voice mode indicator */}
+          {voicePrefs.voiceEnabled && (
+            <p className="mt-2 text-center text-[10px] text-white/30 flex items-center justify-center gap-1">
+              <Mic className="h-3 w-3" />
+              Voice enabled · Tap mic to speak
+            </p>
+          )}
         </div>
       </div>
 

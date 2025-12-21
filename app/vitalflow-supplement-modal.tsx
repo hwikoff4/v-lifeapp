@@ -41,8 +41,8 @@ export function VitalFlowSupplementModal({ isOpen, onClose, purchaseUrl }: Vital
                 <div className="flex items-center">
                   <Pill className="mr-3 h-6 w-6 text-accent" />
                   <div>
-                    <h3 className="font-bold text-white">Vital Flow</h3>
-                    <p className="text-xs text-accent">Testosterone Support</p>
+                    <h3 className="font-bold text-white">VitalFlow</h3>
+                    <p className="text-xs text-accent">Natural Testosterone Support</p>
                   </div>
                 </div>
                 <button onClick={onClose} className="rounded-full p-1 hover:bg-white/10">
@@ -54,45 +54,72 @@ export function VitalFlowSupplementModal({ isOpen, onClose, purchaseUrl }: Vital
                 {/* Description */}
                 <div className="space-y-2">
                   <p className="text-sm text-white/90 leading-relaxed">
-                    Vital Flow is a premium testosterone support supplement designed to help optimize 
-                    your natural hormone production, energy levels, and overall vitality.
+                    <span className="text-accent font-semibold">World&apos;s First TRT Dissolvable</span> - VitalFlow is a natural testosterone support drink mix. 
+                    Just mix one lemonade-flavored packet with water daily to unleash your power.
+                  </p>
+                  <p className="text-xs text-white/60">
+                    30 servings per container • $89.99 one-time or $69.99/month subscription
                   </p>
                 </div>
 
                 {/* Key Benefits */}
                 <div className="space-y-2">
-                  <h4 className="text-sm font-semibold text-white">Key Benefits</h4>
+                  <h4 className="text-sm font-semibold text-white">6 Key Benefits</h4>
                   <ul className="space-y-2 text-sm text-white/80">
                     <li className="flex items-start">
-                      <span className="text-accent mr-2">•</span>
-                      <span>Supports healthy testosterone levels naturally</span>
+                      <span className="text-accent mr-2">✓</span>
+                      <span><strong>Improve Sex Life</strong> - Better libido and performance</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="text-accent mr-2">•</span>
-                      <span>Enhances energy and vitality throughout the day</span>
+                      <span className="text-accent mr-2">✓</span>
+                      <span><strong>Boost Your Mood</strong> - Feel confident and positive</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="text-accent mr-2">•</span>
-                      <span>Promotes lean muscle development and recovery</span>
+                      <span className="text-accent mr-2">✓</span>
+                      <span><strong>Increase Energy</strong> - Wake up refreshed, stay energized</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="text-accent mr-2">•</span>
-                      <span>Improves mental clarity and focus</span>
+                      <span className="text-accent mr-2">✓</span>
+                      <span><strong>Boost Focus</strong> - Enhanced clarity and decision-making</span>
                     </li>
                     <li className="flex items-start">
-                      <span className="text-accent mr-2">•</span>
-                      <span>Supports overall male health and performance</span>
+                      <span className="text-accent mr-2">✓</span>
+                      <span><strong>Recover Faster</strong> - Support muscle growth and recovery</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-accent mr-2">✓</span>
+                      <span><strong>Vitality Benefits</strong> - Feel in your prime again</span>
                     </li>
                   </ul>
                 </div>
 
-                {/* Additional Info */}
+                {/* Supplement Facts */}
                 <div className="space-y-2">
-                  <h4 className="text-sm font-semibold text-white">What's Inside</h4>
-                  <p className="text-xs text-white/70 leading-relaxed">
-                    Formulated with clinically-studied ingredients including D-Aspartic Acid, 
-                    Fenugreek Extract, Zinc, Magnesium, and Vitamin D3 to support optimal 
-                    hormonal balance and male vitality.
+                  <h4 className="text-sm font-semibold text-white">Supplement Facts (per packet)</h4>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-white/70 bg-white/5 rounded-lg p-3">
+                    <span>Vitamin A (Palmitate)</span><span className="text-right">25mcg (1500 IU)</span>
+                    <span>Vitamin C (Ascorbic Acid)</span><span className="text-right">100mg</span>
+                    <span>Vitamin D3 (Cholecalciferol)</span><span className="text-right">125mcg (5000 IU)</span>
+                    <span>Vitamin E (D-Alpha Tocopherol)</span><span className="text-right">5mcg (200 IU)</span>
+                    <span>Magnesium (Mg Oxide)</span><span className="text-right">150mg</span>
+                    <span>Zinc (Zinc Citrate)</span><span className="text-right">6mg</span>
+                    <span className="font-medium text-white/90">L-Arginine HCl</span><span className="text-right font-medium text-white/90">1500mg</span>
+                    <span className="font-medium text-white/90">D-Aspartic Acid</span><span className="text-right font-medium text-white/90">750mg</span>
+                    <span className="font-medium text-white/90">Ashwagandha Extract</span><span className="text-right font-medium text-white/90">150mg</span>
+                    <span>Grape Seed Extract</span><span className="text-right">100mg</span>
+                    <span>Boron Citrate (3mg Boron)</span><span className="text-right">40mg</span>
+                    <span>DHQ</span><span className="text-right">25mg</span>
+                  </div>
+                  <p className="text-[10px] text-white/50">
+                    Other ingredients: Citric Acid, Natural Flavoring, Silicone Dioxide, Malic Acid, Stevia
+                  </p>
+                </div>
+
+                {/* Suggested Use */}
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-white">Suggested Use</h4>
+                  <p className="text-xs text-white/70">
+                    Take one serving daily. Mix with water for a refreshing lemon drink!
                   </p>
                 </div>
               </div>

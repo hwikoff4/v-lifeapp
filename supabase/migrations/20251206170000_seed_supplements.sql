@@ -13,19 +13,21 @@ INSERT INTO public.supplements (
 )
 VALUES
   (
-    'Vital Flow',
+    'VitalFlow',
     'Testosterone Support',
-    'Premium testosterone booster formulated with natural ingredients to optimize hormone levels and maximize fitness results',
+    'World''s First TRT Dissolvable - Natural Testosterone Support Drink Mix. Lemonade-flavored packets formulated with clinically-studied ingredients including L-Arginine, D-Aspartic Acid, Ashwagandha, Vitamin D3, Zinc, and Magnesium to support optimal hormone levels and male vitality.',
     ARRAY[
-      'Naturally boost testosterone levels',
-      'Enhance muscle growth and recovery',
-      'Improve energy and vitality',
-      'Support healthy hormone balance'
+      'Improve Sex Life - Better libido and performance',
+      'Boost Your Mood - Feel confident and positive',
+      'Increase Energy - Wake up refreshed, stay energized all day',
+      'Boost Focus - Enhanced clarity and decision-making',
+      'Recover Faster - Support muscle growth and recovery',
+      'Vitality Benefits - Feel in your prime again'
     ],
-    '2 capsules',
-    'Morning',
+    '1 packet mixed with water',
+    'Daily',
     true,
-    '#'
+    'https://vitalflowofficial.com/products/vitalflow-natural-testosterone-support-drink-mix'
   ),
   (
     'Protein Powder',

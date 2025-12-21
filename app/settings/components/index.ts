@@ -6,4 +6,5 @@ export { UnitsSection } from "./UnitsSection"
 export { PrivacySection } from "./PrivacySection"
 export { AboutSection } from "./AboutSection"
 export { PlanSection } from "./PlanSection"
+export { VoiceSection } from "./VoiceSection"
 

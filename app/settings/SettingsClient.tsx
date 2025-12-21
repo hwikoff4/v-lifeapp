@@ -31,8 +31,9 @@ import {
   PrivacySection,
   AboutSection,
   PlanSection,
+  VoiceSection,
 } from "./components"
-import type { ProfileFormData, ReferralStats, StreakStats, Milestone, NotificationPreferences } from "@/lib/types"
+import type { ProfileFormData, ReferralStats, StreakStats, Milestone, NotificationPreferences, VoicePreferences, GeminiVoiceName } from "@/lib/types"
 
 // Lazy load modals
 const UpdateProfileModal = lazy(() => import("@/app/update-profile-modal").then(m => ({ default: m.UpdateProfileModal })))
@@ -142,6 +143,15 @@ export default function SettingsClient() {
     }
   }, [appData?.notificationPreferences])
 
+  const voicePreferences = useMemo<VoicePreferences>(() => {
+    const profileVoicePrefs = appData?.profile?.voice_preferences as VoicePreferences | undefined
+    return profileVoicePrefs || {
+      selectedVoice: "Kore",
+      voiceEnabled: true,
+      autoPlayResponses: false,
+    }
+  }, [appData?.profile?.voice_preferences])
+
   // Set notification permission on client only to avoid hydration mismatch
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -230,6 +240,72 @@ export default function SettingsClient() {
   const handleTimeChange = async (key: string, value: string) => {
     await updateNotificationPreferences({ [key]: value } as Partial<NotificationPreferences>)
     await refresh()
+  }
+
+  const handleVoiceToggle = async (key: keyof VoicePreferences, value: boolean) => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const newPrefs = { ...voicePreferences, [key]: value }
+    await supabase
+      .from("profiles")
+      .update({ voice_preferences: newPrefs })
+      .eq("id", user.id)
+    
+    await refresh()
+    toast({
+      title: "Voice Settings Updated",
+      description: "Your voice preferences have been saved",
+    })
+  }
+
+  const handleVoiceChange = async (voice: GeminiVoiceName) => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const newPrefs = { ...voicePreferences, selectedVoice: voice }
+    await supabase
+      .from("profiles")
+      .update({ voice_preferences: newPrefs })
+      .eq("id", user.id)
+    
+    await refresh()
+    toast({
+      title: "Voice Changed",
+      description: `VBot will now use the ${voice} voice`,
+    })
+  }
+
+  const handlePreviewVoice = async (voice: GeminiVoiceName) => {
+    try {
+      const response = await fetch("/api/vbot-tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: "Hi! I'm VBot, your AI fitness coach. Ready to help you achieve your goals!",
+          voice,
+        }),
+      })
+
+      if (!response.ok) throw new Error("Preview failed")
+
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioUrl)
+      await audio.play()
+      
+      // Clean up after playback
+      audio.onended = () => URL.revokeObjectURL(audioUrl)
+    } catch (err) {
+      console.error("Voice preview error:", err)
+      toast({
+        title: "Preview Failed",
+        description: "Could not preview the voice. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleExportData = async () => {
@@ -439,6 +515,14 @@ export default function SettingsClient() {
             timezone={profileData.timezone || "America/New_York"}
             onMetricChange={setUseMetric}
             onTimezoneChange={handleTimezoneChange}
+          />
+
+          <VoiceSection
+            loading={false}
+            preferences={voicePreferences}
+            onToggle={handleVoiceToggle}
+            onVoiceChange={handleVoiceChange}
+            onPreviewVoice={handlePreviewVoice}
           />
 
           <PlanSection

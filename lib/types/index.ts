@@ -2,6 +2,59 @@
 // Core Domain Types for V-Life Fitness App
 // ============================================
 
+// Voice/TTS Types (must be defined before Profile which references them)
+export type GeminiVoiceName = 
+  | 'Zephyr' | 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Leda'
+  | 'Orus' | 'Aoede' | 'Callirrhoe' | 'Autonoe' | 'Enceladus' | 'Iapetus'
+  | 'Umbriel' | 'Algieba' | 'Despina' | 'Erinome' | 'Algenib' | 'Rasalgethi'
+  | 'Laomedeia' | 'Achernar' | 'Alnilam' | 'Schedar' | 'Gacrux' | 'Pulcherrima'
+  | 'Achird' | 'Zubenelgenubi' | 'Vindemiatrix' | 'Sadachbia' | 'Sadaltager' | 'Sulafat'
+
+export interface VoicePreferences {
+  selectedVoice: GeminiVoiceName
+  voiceEnabled: boolean
+  autoPlayResponses: boolean
+}
+
+export interface VoiceOption {
+  name: GeminiVoiceName
+  style: string
+}
+
+// All 30 Gemini TTS voice options
+export const GEMINI_VOICES: VoiceOption[] = [
+  { name: 'Zephyr', style: 'Bright' },
+  { name: 'Puck', style: 'Upbeat' },
+  { name: 'Charon', style: 'Informative' },
+  { name: 'Kore', style: 'Firm' },
+  { name: 'Fenrir', style: 'Excitable' },
+  { name: 'Leda', style: 'Youthful' },
+  { name: 'Orus', style: 'Firm' },
+  { name: 'Aoede', style: 'Breezy' },
+  { name: 'Callirrhoe', style: 'Easy-going' },
+  { name: 'Autonoe', style: 'Bright' },
+  { name: 'Enceladus', style: 'Breathy' },
+  { name: 'Iapetus', style: 'Clear' },
+  { name: 'Umbriel', style: 'Easy-going' },
+  { name: 'Algieba', style: 'Smooth' },
+  { name: 'Despina', style: 'Smooth' },
+  { name: 'Erinome', style: 'Clear' },
+  { name: 'Algenib', style: 'Gravelly' },
+  { name: 'Rasalgethi', style: 'Informative' },
+  { name: 'Laomedeia', style: 'Upbeat' },
+  { name: 'Achernar', style: 'Soft' },
+  { name: 'Alnilam', style: 'Firm' },
+  { name: 'Schedar', style: 'Even' },
+  { name: 'Gacrux', style: 'Mature' },
+  { name: 'Pulcherrima', style: 'Forward' },
+  { name: 'Achird', style: 'Friendly' },
+  { name: 'Zubenelgenubi', style: 'Casual' },
+  { name: 'Vindemiatrix', style: 'Gentle' },
+  { name: 'Sadachbia', style: 'Lively' },
+  { name: 'Sadaltager', style: 'Knowledgeable' },
+  { name: 'Sulafat', style: 'Warm' },
+]
+
 // User & Profile Types
 export interface Profile {
   id: string
@@ -23,6 +76,7 @@ export interface Profile {
   referral_code: string | null
   credits: number
   onboarding_completed: boolean | null
+  voice_preferences?: VoicePreferences | null
   created_at: string
   updated_at: string
 }
