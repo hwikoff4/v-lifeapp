@@ -63,9 +63,16 @@ export class GeminiLiveClient {
         // Don't resolve or callback yet - wait for setupComplete message
       }
 
-      this.ws.onmessage = (event) => {
-        console.log("[GeminiLive] 📩 Raw message received, type:", typeof event.data, "length:", event.data?.length || 0)
-        this.handleMessage(event.data)
+      this.ws.onmessage = async (event) => {
+        // Handle Blob data (browser WebSocket returns Blob for binary/text)
+        let data = event.data
+        if (data instanceof Blob) {
+          data = await data.text()
+          console.log("[GeminiLive] 📩 Blob message received, converted to text, length:", data.length)
+        } else {
+          console.log("[GeminiLive] 📩 Raw message received, type:", typeof data, "length:", data?.length || 0)
+        }
+        this.handleMessage(data)
       }
 
       this.ws.onerror = (error) => {
@@ -90,21 +97,23 @@ export class GeminiLiveClient {
   private sendSetup(): void {
     if (!this.ws) return
 
-    // Simplified setup matching official docs format
+    // Setup message format for Gemini Live API WebSocket
+    // Uses snake_case for wire protocol as per Google API conventions
+    // Config fields are at top level, not nested in generation_config
     const setup = {
       setup: {
         model: `models/${this.config.model}`,
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: "Kore",  // Use default voice from docs
+        generation_config: {
+          response_modalities: ["AUDIO"],
+          speech_config: {
+            voice_config: {
+              prebuilt_voice_config: {
+                voice_name: this.config.voice || "Kore",
               },
             },
           },
         },
-        systemInstruction: {
+        system_instruction: {
           parts: [
             {
               text: this.config.systemInstruction || 
@@ -122,8 +131,9 @@ export class GeminiLiveClient {
   private handleMessage(data: string | ArrayBuffer): void {
     try {
       if (typeof data === "string") {
+        console.log("[GeminiLive] 📨 Raw JSON string:", data.slice(0, 1000))
         const message = JSON.parse(data)
-        console.log("[GeminiLive] 📨 Received message:", JSON.stringify(message).slice(0, 500))
+        console.log("[GeminiLive] 📨 Parsed message keys:", Object.keys(message))
         
         // Handle errors from server
         if (message.error) {
@@ -132,8 +142,8 @@ export class GeminiLiveClient {
           return
         }
 
-        // Handle setup complete
-        if (message.setupComplete) {
+        // Handle setup complete (check both camelCase and snake_case)
+        if (message.setupComplete || message.setup_complete) {
           console.log("[GeminiLive] ✅ Setup complete - ready for audio!")
           this.isSetupComplete = true
           // Clear the setup timeout
@@ -148,9 +158,10 @@ export class GeminiLiveClient {
           return
         }
 
-        // Handle server content (audio/text response)
-        if (message.serverContent) {
-          const content = message.serverContent
+        // Handle server content (audio/text response) - check both cases
+        const serverContent = message.serverContent || message.server_content
+        if (serverContent) {
+          const content = serverContent
           console.log("[GeminiLive] 📦 Server content keys:", Object.keys(content))
           
           // Handle interruption (user spoke while model was responding)
@@ -159,45 +170,53 @@ export class GeminiLiveClient {
             return
           }
 
-          // Handle input transcription (what the user said)
-          if (content.inputTranscription) {
-            console.log("[GeminiLive] 🎤 Input transcription:", content.inputTranscription.text)
+          // Handle input transcription (what the user said) - check both cases
+          const inputTranscription = content.inputTranscription || content.input_transcription
+          if (inputTranscription) {
+            console.log("[GeminiLive] 🎤 Input transcription:", inputTranscription.text)
           }
 
-          // Handle output transcription (what the model said)
-          if (content.outputTranscription) {
-            console.log("[GeminiLive] 🔊 Output transcription:", content.outputTranscription.text)
-            this.callbacks.onTranscript(content.outputTranscription.text, content.turnComplete || false)
+          // Handle output transcription (what the model said) - check both cases
+          const outputTranscription = content.outputTranscription || content.output_transcription
+          const turnComplete = content.turnComplete || content.turn_complete
+          if (outputTranscription) {
+            console.log("[GeminiLive] 🔊 Output transcription:", outputTranscription.text)
+            this.callbacks.onTranscript(outputTranscription.text, turnComplete || false)
           }
           
-          // Handle audio parts
-          if (content.modelTurn?.parts) {
-            console.log("[GeminiLive] 🎵 Model turn with", content.modelTurn.parts.length, "parts")
-            for (const part of content.modelTurn.parts) {
-              if (part.inlineData?.mimeType?.includes("audio")) {
+          // Handle audio parts - check both cases
+          const modelTurn = content.modelTurn || content.model_turn
+          if (modelTurn?.parts) {
+            console.log("[GeminiLive] 🎵 Model turn with", modelTurn.parts.length, "parts")
+            for (const part of modelTurn.parts) {
+              // Check both camelCase and snake_case for inline data
+              const inlineData = part.inlineData || part.inline_data
+              const mimeType = inlineData?.mimeType || inlineData?.mime_type
+              if (mimeType?.includes("audio")) {
                 // Decode base64 audio and play
-                const audioData = this.base64ToArrayBuffer(part.inlineData.data)
+                const audioData = this.base64ToArrayBuffer(inlineData.data)
                 console.log("[GeminiLive] 🔊 Audio chunk:", audioData.byteLength, "bytes")
                 this.callbacks.onAudioData(audioData)
               }
               if (part.text) {
                 console.log("[GeminiLive] 📝 Text part:", part.text)
-                this.callbacks.onTranscript(part.text, content.turnComplete || false)
+                this.callbacks.onTranscript(part.text, turnComplete || false)
               }
             }
           }
 
           // Handle turn complete
-          if (content.turnComplete) {
+          if (turnComplete) {
             console.log("[GeminiLive] ✅ Turn complete - model finished speaking")
             // Signal turn complete with empty text
             this.callbacks.onTranscript("", true)
           }
         }
 
-        // Handle tool calls if any
-        if (message.toolCall) {
-          console.log("[GeminiLive] 🔧 Tool call received:", message.toolCall)
+        // Handle tool calls if any - check both cases
+        const toolCall = message.toolCall || message.tool_call
+        if (toolCall) {
+          console.log("[GeminiLive] 🔧 Tool call received:", toolCall)
         }
       }
     } catch (err) {
@@ -228,11 +247,12 @@ export class GeminiLiveClient {
     // Convert ArrayBuffer to base64
     const base64 = this.arrayBufferToBase64(audioData)
     
+    // Use snake_case for wire protocol - matches SDK's sendRealtimeInput format
     const message = {
-      realtimeInput: {
-        mediaChunks: [
+      realtime_input: {
+        media_chunks: [
           {
-            mimeType: "audio/pcm;rate=16000",
+            mime_type: "audio/pcm;rate=16000",
             data: base64,
           },
         ],
@@ -256,15 +276,16 @@ export class GeminiLiveClient {
       return
     }
 
+    // Use snake_case for wire protocol - matches SDK's sendClientContent format
     const message = {
-      clientContent: {
+      client_content: {
         turns: [
           {
             role: "user",
             parts: [{ text }],
           },
         ],
-        turnComplete: true,
+        turn_complete: true,
       },
     }
 
