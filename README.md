@@ -16,7 +16,7 @@ Your project is live at:
 
 **[https://vercel.com/hwikoff4s-projects/v0-v-life-new](https://vercel.com/hwikoff4s-projects/v0-v-life-new)**
 
-## Build your app
+## Build your app!
 
 Continue building your app on:
 
